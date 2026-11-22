@@ -272,8 +272,13 @@ export const loginInput = z.object({
   password: z.string().max(200),
 });
 
+const personName = {
+  firstname: z.string().trim().min(1, "Vorname fehlt").max(100),
+  lastname: z.string().trim().min(1, "Nachname fehlt").max(100),
+};
+
 export const registerInput = z.object({
-  name: z.string().trim().min(1, "Name fehlt").max(100),
+  ...personName,
   email,
   password: newPassword,
 });
@@ -285,7 +290,7 @@ export const resetPasswordInput = z.object({ token: z.string().min(1).max(200), 
 /** «Mein Konto»: `currentPassword` only needed when a password is already set */
 export const changePasswordInput = z.object({ currentPassword: z.string().max(200).optional(), newPassword });
 
-export const profileInput = z.object({ name: z.string().trim().min(1, "Name fehlt").max(100) });
+export const profileInput = z.object(personName);
 
 export const authSettingsInput = z.object({
   mode: z.enum(["nexusIdentity", "local"]),

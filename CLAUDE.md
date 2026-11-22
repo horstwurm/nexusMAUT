@@ -38,7 +38,15 @@ comPrefs (`email`, `telefon`, `post`, `sms`) are created. If the customer attrib
 carries `sample: true`; `sample:remove` deletes only those (sample types still
 used by real records stay). Remove before going live.
 
-Local DB: the MongoDB in `~/mongodb` (port 27019), database `nexus-maut`.
+**Development uses the live database** (since 2026-11-22, the user's choice):
+`.env.local` points `MONGODB_URI` at MongoDB Atlas, database `nexus-maut` – the
+same database as the live app on Vercel. Everything the dev server, scripts and
+smoke tests write is live immediately, and settings stored in the DB (e.g. the
+login mode in Admin → Anmeldung) apply to production too. So: ask before
+creating test users / test data there (and remove them afterwards), ask before
+`npm run sample:create` / `sample:remove` / `auth:mode`; run smoke tests against
+the local MongoDB instead (`~/mongodb`, port 27019, a throw-away database).
+Never print `.env.local` values – the URI contains the Atlas password.
 If a new route sees `undefined` for a new collection or schema after edits,
 or a changed validation still behaves the old way (Turbopack kept a stale
 `db.ts` / `schemas.ts` or a lib they import), restart the dev server.

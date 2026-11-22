@@ -20,7 +20,10 @@ export type Role = "admin" | "editor" | "pending";
 export type UserDoc = {
   _id: string;
   email: string;
+  /** display name («Vorname Nachname») */
   name: string;
+  firstname?: string;
+  lastname?: string;
   /** pending = logged in, waiting for an admin to give access */
   role: Role;
   /** own login (passwords.ts: scrypt) – set by registration, «Mein Konto» or a reset link */

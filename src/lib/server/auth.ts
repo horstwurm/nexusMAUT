@@ -49,32 +49,37 @@ export async function upsertUser(claims: IdClaims) {
   const { users } = await collections();
   const now = new Date();
   const email = (claims.email ?? "").toLowerCase();
-  const name = claims.name?.trim() || email;
+  const firstname = claims.given_name?.trim();
+  const lastname = claims.family_name?.trim();
+  const name = claims.name?.trim() || [firstname, lastname].filter(Boolean).join(" ") || email;
+  const parts = { ...(firstname && { firstname }), ...(lastname && { lastname }) };
   const linked =
     (await users.findOne({ $or: [{ _id: claims.sub }, { oidcSub: claims.sub }] })) ??
     (claims.email_verified === true && email ? await users.findOne({ email, _id: /^local_/, oidcSub: { $exists: false } }) : null);
   if (linked) {
     const user = await users.findOneAndUpdate(
       { _id: linked._id },
-      { $set: { email, name, lastLoginAt: now, ...(linked._id !== claims.sub && { oidcSub: claims.sub }) } },
+      { $set: { email, name, ...parts, lastLoginAt: now, ...(linked._id !== claims.sub && { oidcSub: claims.sub }) } },
       { returnDocument: "after" },
     );
     return promoteFirstUser(user!);
   }
-  const user: UserDoc = { _id: claims.sub, email, name, role: "pending", createdAt: now, lastLoginAt: now };
+  const user: UserDoc = { _id: claims.sub, email, name, ...parts, role: "pending", createdAt: now, lastLoginAt: now };
   await users.insertOne(user);
   return promoteFirstUser(user);
 }
 
 /** Own login: a new account (waits for a role – unless it is the very first user). */
-export async function createLocalUser(p: { email: string; name: string; passwordHash: string }) {
+export async function createLocalUser(p: { email: string; firstname: string; lastname: string; passwordHash: string }) {
   const { users } = await collections();
   if (await users.findOne({ email: p.email })) throw new HttpError(409, "Diese E-Mail-Adresse ist bereits registriert");
   const now = new Date();
   const user: UserDoc = {
     _id: `local_${randomUUID()}`,
     email: p.email,
-    name: p.name,
+    name: `${p.firstname} ${p.lastname}`,
+    firstname: p.firstname,
+    lastname: p.lastname,
     role: "pending",
     passwordHash: p.passwordHash,
     passwordChangedAt: now,

@@ -71,7 +71,7 @@ export function LoginForm({ returnTo, allowRegistration }: { returnTo: string; a
 }
 
 export function RegisterForm({ returnTo }: { returnTo: string }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ firstname: "", lastname: "", email: "", password: "" });
   const { busy, error, run } = useSubmit();
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
   return (
@@ -85,9 +85,14 @@ export function RegisterForm({ returnTo }: { returnTo: string }) {
       }}
     >
       <Notice kind="error">{error}</Notice>
-      <Field label="Name">
-        <input autoComplete="name" required autoFocus maxLength={100} value={form.name} onChange={set("name")} />
-      </Field>
+      <div className="grid2">
+        <Field label="Vorname">
+          <input type="text" autoComplete="given-name" required autoFocus maxLength={100} value={form.firstname} onChange={set("firstname")} />
+        </Field>
+        <Field label="Nachname">
+          <input type="text" autoComplete="family-name" required maxLength={100} value={form.lastname} onChange={set("lastname")} />
+        </Field>
+      </div>
       <Field label="E-Mail">
         <input type="email" autoComplete="email" required maxLength={254} value={form.email} onChange={set("email")} />
       </Field>
@@ -182,9 +187,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
   );
 }
 
-/** «Mein Konto»: display name. */
-export function ProfileForm({ name: initial }: { name: string }) {
-  const [name, setName] = useState(initial);
+/** «Mein Konto»: first and last name. */
+export function ProfileForm({ firstname: f, lastname: l }: { firstname: string; lastname: string }) {
+  const [form, setForm] = useState({ firstname: f, lastname: l });
   const [saved, setSaved] = useState(false);
   const { busy, error, run } = useSubmit();
   return (
@@ -193,16 +198,21 @@ export function ProfileForm({ name: initial }: { name: string }) {
         e.preventDefault();
         setSaved(false);
         run(async () => {
-          await api("/api/account", { method: "PATCH", body: { name } });
+          await api("/api/account", { method: "PATCH", body: form });
           setSaved(true);
         });
       }}
     >
       <Notice kind="error">{error}</Notice>
       <Notice kind="ok">{saved ? "Gespeichert." : null}</Notice>
-      <Field label="Name">
-        <input required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
+      <div className="grid2">
+        <Field label="Vorname">
+          <input type="text" autoComplete="given-name" required maxLength={100} value={form.firstname} onChange={(e) => setForm({ ...form, firstname: e.target.value })} />
+        </Field>
+        <Field label="Nachname">
+          <input type="text" autoComplete="family-name" required maxLength={100} value={form.lastname} onChange={(e) => setForm({ ...form, lastname: e.target.value })} />
+        </Field>
+      </div>
       <button className="btn btn-primary" disabled={busy}>
         Speichern
       </button>

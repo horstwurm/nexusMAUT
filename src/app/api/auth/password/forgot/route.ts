@@ -25,7 +25,7 @@ export const POST = route(async (req: Request) => {
         user.email,
         "nexusMAUT – Passwort festlegen",
         [
-          `Hallo ${user.name}`,
+          `Hallo ${user.firstname ?? user.name}`,
           "",
           `Mit diesem Link legst Du ein neues Passwort für nexusMAUT fest. Er ist ${RESET_MINUTES} Minuten gültig und nur einmal verwendbar:`,
           "",

@@ -14,6 +14,10 @@ export default async function AccountPage() {
   if (!user) redirect("/login?return=%2Faccount");
   if (user.role === "pending") redirect("/pending");
   const mode = await authMode();
+  // older accounts only have a display name: first word = first name
+  const [first, ...rest] = user.name.trim().split(/\s+/);
+  const firstname = user.firstname ?? first ?? "";
+  const lastname = user.lastname ?? rest.join(" ");
   const viaIdentity = !user._id.startsWith("local_") || Boolean(user.oidcSub);
   return (
     <>
@@ -35,7 +39,7 @@ export default async function AccountPage() {
                 ? "Bei der nächsten Anmeldung über nexusIdentity wird der Name von dort übernommen."
                 : "So erscheinst Du in nexusMAUT."}
             </p>
-            <ProfileForm name={user.name} />
+            <ProfileForm firstname={firstname} lastname={lastname} />
           </section>
           <section className="card">
             <h2>Passwort</h2>
