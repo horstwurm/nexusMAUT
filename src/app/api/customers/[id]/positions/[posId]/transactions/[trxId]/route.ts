@@ -5,6 +5,7 @@ import { attributeDefsOf, requireCustomerPosition, toPositionTransaction } from 
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { transactionInput } from "@/lib/server/schemas";
+import { refreshTransaction } from "@/lib/server/serviceAttributes";
 
 // PUT    /api/customers/ID/positions/POS/transactions/TRX { values } – replace the values
 // PATCH  /api/customers/ID/positions/POS/transactions/TRX { sort } – reorder
@@ -31,7 +32,8 @@ export const PUT = route(async (req: Request, ctx: Ctx) => {
     { returnDocument: "after" },
   );
   if (!doc) throw new HttpError(404, "Nicht gefunden");
-  return Response.json(toPositionTransaction(doc), { headers: NO_STORE });
+  await refreshTransaction(doc._id); // «Service» transaction attributes
+  return Response.json(toPositionTransaction((await positionTransactions.findOne({ _id: doc._id }))!), { headers: NO_STORE });
 });
 
 export const PATCH = route(async (req: Request, ctx: Ctx) => {

@@ -15,12 +15,12 @@ export default async function RulesPage() {
   const user = await requirePageUser("/rules");
   const { rules } = await collections();
   const types = await domainValues("productServiceType");
-  const [list, ds, positionAttrs, trxAttrs, customerAttrs] = await Promise.all([
+  const [list, positionAttrs, trxAttrs, customerAttrs, ds] = await Promise.all([
     rules.find({}, { collation: { locale: "de" } }).sort({ name: 1 }).toArray(),
-    loadRuleDataset(),
     attributesByType(types, "position"),
     attributesByType(types, "trx"),
     customerAttributeDefs(),
+    loadRuleDataset(),
   ]);
   return (
     <>

@@ -16,6 +16,7 @@ type CallResult = {
   mapped: MappedValue[] | null;
   /** service not available: the expected answer with sample data */
   mock?: { response: Record<string, unknown>; mapped: MappedValue[] };
+  random?: boolean;
 };
 
 const toDefs = (list: TypeAttribute[]): AttributeDef[] => list.map((a) => ({ id: a.id, attribute: a.attribute, attributeType: a.attributeType, options: a.options }));
@@ -135,6 +136,11 @@ export function ServiceCallModal({ service, onClose }: { service: ServiceView; o
                     <span className="muted">{result.response.durationMs} ms</span>
                     {result.response.contentType && <span className="muted mono">{result.response.contentType}</span>}
                   </div>
+                )}
+                {result.random && (
+                  <Notice kind="warn">
+                    <strong>Mock</strong> – der Service wurde nicht aufgerufen, das sind Zufallswerte.
+                  </Notice>
                 )}
                 <Notice kind={result.response ? "warn" : "error"}>{result.error}</Notice>
                 {result.mapped && <MappedTable rows={result.mapped} />}

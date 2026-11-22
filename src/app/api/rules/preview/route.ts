@@ -11,7 +11,8 @@ const LIMIT = 50;
 export const POST = route(async (req: Request) => {
   await requireUser();
   const rule = await readJson(req, ruleInput.partial({ name: true }));
-  const list = matchingCustomers(rule, await loadRuleDataset());
+  const ds = await loadRuleDataset();
+  const list = matchingCustomers(rule, ds);
   return Response.json(
     {
       count: list.length,

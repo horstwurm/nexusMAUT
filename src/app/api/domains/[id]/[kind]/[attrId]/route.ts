@@ -4,7 +4,8 @@ import { requireUser } from "@/lib/server/auth";
 import { collections } from "@/lib/server/db";
 import { attributeCollection, toTypeAttribute } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
-import { typeAttributeInput } from "@/lib/server/schemas";
+import { sourcedAttributeInput } from "@/lib/server/schemas";
+import { resolveAttributeSource } from "@/lib/server/serviceSources";
 
 // KIND = position-attributes | trx-attributes (see ../route.ts)
 // PUT    /api/domains/TYPE_ID/KIND/AID { attribute, attributeType, options? } – replace (admins)
@@ -23,7 +24,7 @@ async function target(ctx: Ctx) {
 export const PUT = route(async (req: Request, ctx: Ctx) => {
   await requireUser("admin");
   const { col, filter } = await target(ctx);
-  const input = await readJson(req, typeAttributeInput);
+  const input = await resolveAttributeSource(await readJson(req, sourcedAttributeInput));
   let doc;
   try {
     doc = await col.findOneAndUpdate(filter, { $set: { ...input, updatedAt: new Date() } }, { returnDocument: "after" });
@@ -52,7 +53,8 @@ export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   // its values leave the positions / transactions (records left without any value stay, shown empty)
   const { customerPositions, positionTransactions } = await collections();
   const key = `values.${filter._id.toHexString()}`;
+  const meta = `serviceFetched.${filter._id.toHexString()}`;
   const holders = kind === "position" ? customerPositions : positionTransactions;
-  await holders.updateMany({ [key]: { $exists: true } }, { $unset: { [key]: "" } });
+  await holders.updateMany({ $or: [{ [key]: { $exists: true } }, { [meta]: { $exists: true } }] }, { $unset: { [key]: "", [meta]: "" } });
   return new Response(null, { status: 204 });
 });

@@ -20,6 +20,7 @@ export const toService = (s: ServiceDoc, attributeCounts = { put: 0, get: 0 }): 
   name: s.name,
   serviceType: s.serviceType,
   url: s.url ?? "",
+  mock: s.mock ?? false,
   updatedAt: s.updatedAt.toISOString(),
   attributeCounts,
 });

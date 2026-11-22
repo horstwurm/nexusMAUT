@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Me } from "@/lib/types";
 import { LogoutButton } from "./LogoutButton";
 
-export type Section = "customers" | "rules" | "journeys" | "customerJourneys" | "admin";
+export type Section = "home" | "customers" | "rules" | "journeys" | "customerJourneys" | "admin" | "account";
 
 const LINKS: { href: string; label: string; section: Section; admin?: boolean }[] = [
   { href: "/customers", label: "Kunden", section: "customers" },
@@ -16,7 +16,7 @@ const LINKS: { href: string; label: string; section: Section; admin?: boolean }[
 export function TopBar({ me, active }: { me: Me; active: Section }) {
   return (
     <header className="topbar">
-      <Link href="/customers" className="brand">
+      <Link href="/" className="brand" title="Startseite">
         <span className="brand-mark">m</span>
         <span>nexusMAUT</span>
       </Link>
@@ -26,9 +26,9 @@ export function TopBar({ me, active }: { me: Me; active: Section }) {
             {l.label}
           </Link>
         ))}
-        <span className="small muted" title={me.email} style={{ padding: "0 6px" }}>
+        <Link href="/account" className={`small${active === "account" ? " active" : ""}`} title={`${me.email} – Mein Konto`}>
           {me.name}
-        </span>
+        </Link>
         <LogoutButton />
       </nav>
     </header>

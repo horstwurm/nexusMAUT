@@ -6,6 +6,7 @@ import type { AttributeKind } from "@/lib/typeAttributes";
 import type { DomainValue, TypeAttribute } from "@/lib/types";
 import { collections, type DomainValueDoc, type TypeAttributeDoc } from "./db";
 import { HttpError } from "./http";
+import { toAttributeDefs } from "./serviceSources";
 
 // Admin-managed value lists. Records store the value's `code`; the field
 // that uses each domain is listed in USAGE (for in-use counts and the
@@ -52,6 +53,7 @@ export const toTypeAttribute = (a: Omit<TypeAttributeDoc, "typeId"> & { typeId: 
   attributeType: a.attributeType,
   options: a.options,
   sort: a.sort,
+  ...(a.service && { service: { serviceId: a.service.serviceId.toHexString(), attrId: a.service.attrId.toHexString() } }),
 });
 
 /** The productServiceType value that owns attributes – 404 / 400 otherwise. */
@@ -72,10 +74,12 @@ export async function attributesByType(types: DomainValueDoc[], kind: AttributeK
   const col = await attributeCollection(kind);
   const codeOf = new Map(types.map((t) => [t._id.toHexString(), t.code]));
   const out: Record<string, AttributeDef[]> = {};
-  for (const a of await col.find({ typeId: { $in: types.map((t) => t._id) } }).sort({ sort: 1, attribute: 1 }).toArray()) {
+  const docs = await col.find({ typeId: { $in: types.map((t) => t._id) } }).sort({ sort: 1, attribute: 1 }).toArray();
+  const defs = await toAttributeDefs(docs);
+  docs.forEach((a, i) => {
     const code = codeOf.get(a.typeId.toHexString())!;
-    (out[code] ??= []).push({ id: a._id.toHexString(), attribute: a.attribute, attributeType: a.attributeType, options: a.options });
-  }
+    (out[code] ??= []).push(defs[i]);
+  });
   return out;
 }
 

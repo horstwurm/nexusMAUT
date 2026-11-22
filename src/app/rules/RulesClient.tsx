@@ -130,7 +130,7 @@ export function RulesClient({
         <div>
           <h1>Kunden Selektionen</h1>
           <p className="muted" style={{ margin: 0 }}>
-            Kundensegmente nach Bedingungen auf Kunde, Positionen und Transaktionen – mit den aktuellen Treffern.
+            Kundensegmente nach Bedingungen auf Kunde, Positionen und Transaktionen (auch Service-Attribute) – mit den aktuellen Treffern.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setEditing("new")}>
@@ -500,6 +500,7 @@ function ConditionFields({ c, lookup, onChange }: { c: Condition; lookup: Lookup
               {lookup.customerAttributes.map((a) => (
                 <option key={a.id} value={`attr:${a.id}`}>
                   {a.attribute}
+                  {a.service ? " (Service)" : ""}
                 </option>
               ))}
             </optgroup>

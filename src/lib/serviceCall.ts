@@ -216,5 +216,35 @@ export function mockResponse(getDefs: ServiceAttrDef[], today = new Date().toISO
   return out;
 }
 
+const WORDS = ["Alpha", "Berg", "Delta", "Fluss", "Garten", "Horizont", "Kristall", "Linde", "Nova", "Sonne", "Tanne", "Welle"];
+
+/** A random value of a type (Mock services): text «Name Wort 123», number 0 – 10'000 (2 decimals), date ±1 year, any option. */
+export function randomValue(name: string, type: AttributeType, options: string[], today: string, rnd: () => number = Math.random): PositionValue {
+  const int = (n: number) => Math.floor(rnd() * n);
+  if (type === "alpha") return `${name} ${WORDS[int(WORDS.length)]} ${int(1000)}`;
+  if (type === "num") return Math.round(rnd() * 1_000_000) / 100;
+  if (type === "date") return new Date(Date.parse(`${today}T00:00:00Z`) + (int(731) - 365) * 86_400_000).toISOString().slice(0, 10);
+  if (type === "bool") return rnd() < 0.5;
+  return options.length ? options[int(options.length)] : "";
+}
+
+/**
+ * A random answer (service with «Mock» switched on – it isn't called): one
+ * random value per GET attribute, lists 1 – 5 random rows (at their path).
+ */
+export function randomResponse(getDefs: ServiceAttrDef[], today = new Date().toISOString().slice(0, 10), rnd: () => number = Math.random): Obj {
+  const out: Obj = {};
+  for (const d of getDefs) {
+    if (d.list) {
+      const rows = Array.from({ length: 1 + Math.floor(rnd() * 5) }, () =>
+        Object.fromEntries(d.list!.columns.map((c) => [c.attribute, randomValue(c.attribute, c.attributeType, c.options, today, rnd)])),
+      );
+      if (d.list.path) setPath(out, d.list.path, rows);
+      else out[d.attribute] = rows;
+    } else out[d.attribute] = randomValue(d.attribute, d.attributeType, d.options, today, rnd);
+  }
+  return out;
+}
+
 /** «Not available»: no answer at all, 404 (endpoint missing) or a server error (5xx). */
 export const isUnavailable = (status: number | null) => status === null || status === 404 || status >= 500;

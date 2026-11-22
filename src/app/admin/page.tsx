@@ -5,11 +5,13 @@ import { TopBar } from "@/components/TopBar";
 import { DOMAINS } from "@/lib/domains";
 import { listActions } from "@/lib/server/actions";
 import { requirePageUser, toMe } from "@/lib/server/auth";
+import { authSettingsView } from "@/lib/server/authSettings";
 import { collections } from "@/lib/server/db";
 import { domainValues, toAdminDomainValue, toTypeAttribute } from "@/lib/server/domains";
 import { mailSettingsView } from "@/lib/server/mailSettings";
 import { listServices } from "@/lib/server/services";
 import { ActionsAdmin } from "./ActionsAdmin";
+import { AuthAdmin } from "./AuthAdmin";
 import { AdminTabs } from "./AdminTabs";
 import { CustomerAttributesAdmin } from "./CustomerAttributesAdmin";
 import { DomainAdmin } from "./DomainAdmin";
@@ -26,7 +28,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   // Journeys moved to its own page in the top bar
   if (tab === "journeys") redirect("/journeys");
   const { customerAttributes, users } = await collections();
-  const [customerAttrs, actions, productTypes, comPrefs, mail, serviceTypes, services] = await Promise.all([
+  const [customerAttrs, actions, productTypes, comPrefs, mail, serviceTypes, services, auth] = await Promise.all([
     customerAttributes
       .find()
       .sort({ sort: 1, attribute: 1 })
@@ -38,8 +40,15 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     mailSettingsView(),
     domainValues("serviceType").then((list) => Promise.all(list.map(toAdminDomainValue))),
     listServices(),
+    authSettingsView(),
   ]);
-  const userList = (await users.find().sort({ role: -1, name: 1 }).toArray()).map((u) => ({ ...toMe(u), lastLoginAt: u.lastLoginAt.toISOString() }));
+  const viaIdentity = (u: { _id: string; oidcSub?: string }) => !u._id.startsWith("local_") || Boolean(u.oidcSub);
+  const userList = (await users.find().sort({ role: -1, name: 1 }).toArray()).map((u) => ({
+    ...toMe(u),
+    lastLoginAt: u.lastLoginAt.toISOString(),
+    hasPassword: Boolean(u.passwordHash),
+    nexusIdentity: viaIdentity(u),
+  }));
 
   return (
     <>
@@ -49,7 +58,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div>
             <h1>Administration</h1>
             <p className="muted" style={{ margin: 0 }}>
-              Kundenattribute, Wertelisten, Aktionen, Services, Benutzer und E-Mail-Versand.
+              Kundenattribute, Wertelisten, Aktionen, Services, Benutzer, Anmeldung und E-Mail-Versand.
             </p>
           </div>
         </div>
@@ -97,10 +106,19 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               content: (
                 <section className="card">
                   <h2>Benutzer</h2>
-                  <p className="small muted">Wer sich mit nexusIdentity anmeldet, erscheint hier und wartet auf eine Rolle.</p>
+                  <p className="small muted">
+                    {auth.mode === "local"
+                      ? "Wer sich registriert, erscheint hier und wartet auf eine Rolle."
+                      : "Wer sich mit nexusIdentity anmeldet, erscheint hier und wartet auf eine Rolle."}
+                  </p>
                   <UsersClient meId={user._id} initial={userList} />
                 </section>
               ),
+            },
+            {
+              id: "auth",
+              label: "Anmeldung",
+              content: <AuthAdmin initial={auth} myPassword={Boolean(user.passwordHash)} myIdentity={viaIdentity(user)} />,
             },
             { id: "email", label: "E-Mail", content: <MailAdmin initial={mail} myEmail={user.email} /> },
           ]}

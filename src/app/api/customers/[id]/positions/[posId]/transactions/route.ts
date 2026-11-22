@@ -5,6 +5,7 @@ import { attributeDefsOf, requireCustomerPosition, toPositionTransaction } from 
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { transactionInput } from "@/lib/server/schemas";
+import { refreshTransaction } from "@/lib/server/serviceAttributes";
 
 // Transactions of a customer position: values of the transaction attributes
 // (productServiceTypeTrxAttributes) of the position's type.
@@ -47,5 +48,6 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     updatedAt: now,
   };
   await positionTransactions.insertOne(doc);
-  return Response.json(toPositionTransaction(doc), { status: 201, headers: NO_STORE });
+  await refreshTransaction(doc._id); // «Service» transaction attributes
+  return Response.json(toPositionTransaction((await positionTransactions.findOne({ _id: doc._id }))!), { status: 201, headers: NO_STORE });
 });

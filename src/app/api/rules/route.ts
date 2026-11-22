@@ -11,7 +11,8 @@ import { ruleInput } from "@/lib/server/schemas";
 export const GET = route(async () => {
   await requireUser();
   const { rules } = await collections();
-  const [list, ds] = await Promise.all([rules.find({}, { collation: { locale: "de" } }).sort({ name: 1 }).toArray(), loadRuleDataset()]);
+  const list = await rules.find({}, { collation: { locale: "de" } }).sort({ name: 1 }).toArray();
+  const ds = await loadRuleDataset();
   return Response.json(
     list.map((r) => toRuleView(r, matchingCustomers(r, ds).length)),
     { headers: NO_STORE },

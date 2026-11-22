@@ -6,11 +6,11 @@ import { Notice } from "@/components/Notice";
 import { api, errorText, formatDate } from "@/lib/client";
 import { formatDay } from "@/lib/customers";
 import type { AttributeDef } from "@/lib/positions";
-import type { Customer, DomainValue } from "@/lib/types";
-import { AttributeFields, formValues, type FormValue } from "./[id]/AttributeFields";
+import type { Customer, DomainValue, ServiceFetchedView } from "@/lib/types";
+import { AttrCell, AttrHeader, AttributeFields, formValues, type FormValue } from "./[id]/AttributeFields";
 import { CustomerPositionsPanel } from "./[id]/Positions";
 
-type Draft = { id: string | null; name: string; lastname: string; dateOfBirth: string; attributes: Record<string, FormValue> };
+type Draft = { id: string | null; name: string; lastname: string; dateOfBirth: string; attributes: Record<string, FormValue>; fetched?: ServiceFetchedView };
 
 export function CustomersClient({
   types,
@@ -34,6 +34,31 @@ export function CustomersClient({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  // bumped after «Daten aktualisieren» so opened position panels reload
+  const [version, setVersion] = useState(0);
+  // any «Service» attribute on customer, positions or transactions?
+  const hasServiceAttrs = [...customerAttributes, ...Object.values(attributesByType).flat(), ...Object.values(trxAttributesByType).flat()].some((d) => d.service);
+
+  async function refreshServices() {
+    setRefreshing(true);
+    setError(null);
+    setInfo(null);
+    try {
+      // with a search: only the customers shown, else all
+      const body = q.trim() && list ? { customerIds: list.map((c) => c.id) } : {};
+      const r = await api<{ customers: number; records: number; values: number; errors: number; messages: string[] }>("/api/customers/refresh-services", { body });
+      const text = `Daten aktualisiert: ${r.values} Service-Werte für ${r.customers} Kunden geholt.`;
+      if (r.errors) setError(`${text} ${r.errors} Fehler: ${r.messages.join(" · ")}`);
+      else setInfo(text);
+      await load();
+      setVersion((v) => v + 1);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }
   // accordion: open customers
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (id: string) => {
@@ -88,9 +113,25 @@ export function CustomersClient({
             Kommunikationspräferenzen in der Detailansicht.
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setDraft(EMPTY)}>
-          Neuer Kunde
-        </button>
+        <div className="row" style={{ gap: 8 }}>
+          {hasServiceAttrs && (
+            <button
+              className="btn"
+              onClick={refreshServices}
+              disabled={refreshing}
+              title={
+                q.trim()
+                  ? "Service-Attribute der angezeigten Kunden (mit Positionen und Transaktionen) neu von den Services holen"
+                  : "Service-Attribute aller Kunden (mit Positionen und Transaktionen) neu von den Services holen"
+              }
+            >
+              {refreshing ? "Aktualisiere …" : "Daten aktualisieren"}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setDraft(EMPTY)}>
+            Neuer Kunde
+          </button>
+        </div>
       </div>
       <Notice kind="error">{error}</Notice>
       <Notice kind="ok">{info}</Notice>
@@ -99,6 +140,12 @@ export function CustomersClient({
         <div className="row" style={{ marginBottom: 12 }}>
           <input type="search" className="grow" placeholder="Suchen (Vor- oder Nachname)" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 360 }} />
           <span className="small muted">{list ? `${list.length}${list.length >= 200 ? "+" : ""} Kunden` : "Lädt …"}</span>
+          {customerAttributes.some((a) => a.service) && (
+            <span className="small muted" style={{ marginLeft: "auto" }}>
+              <span className="svc-mark">⚡</span> Wert von einem Service: <span className="svc-tag svc-tag-real">echt</span> vom Service,{" "}
+              <span className="svc-tag svc-tag-mock">Mock</span> Zufallswert (Details beim Darüberfahren)
+            </span>
+          )}
         </div>
         {list && list.length === 0 ? (
           <p className="empty">{q ? "Keine Kunden gefunden." : "Noch keine Kunden."}</p>
@@ -111,6 +158,9 @@ export function CustomersClient({
                   <th>Nachname</th>
                   <th>Vorname</th>
                   <th>Geburtsdatum</th>
+                  {customerAttributes.map((a) => (
+                    <AttrHeader key={a.id} def={a} />
+                  ))}
                   <th>Geändert</th>
                   <th />
                 </tr>
@@ -136,6 +186,9 @@ export function CustomersClient({
                       </td>
                       <td>{c.name}</td>
                       <td>{formatDay(c.dateOfBirth)}</td>
+                      {customerAttributes.map((a) => (
+                        <AttrCell key={a.id} def={a} value={c.attributes[a.id]} fetched={c.serviceFetched} />
+                      ))}
                       <td>{formatDate(c.updatedAt)}</td>
                       <td>
                         <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
@@ -149,6 +202,7 @@ export function CustomersClient({
                                 lastname: c.lastname,
                                 dateOfBirth: c.dateOfBirth,
                                 attributes: formValues(customerAttributes, c.attributes),
+                                fetched: c.serviceFetched,
                               })
                             }>
                             Bearbeiten
@@ -161,8 +215,9 @@ export function CustomersClient({
                     </tr>
                     {open.has(c.id) && (
                       <tr>
-                        <td colSpan={6} className="accordion-body">
+                        <td colSpan={6 + customerAttributes.length} className="accordion-body">
                           <CustomerPositionsPanel
+                            key={version}
                             customerId={c.id}
                             types={types}
                             attributesByType={attributesByType}
@@ -239,7 +294,7 @@ function CustomerModal({
         {attributes.length > 0 && (
           <>
             <h3 style={{ marginTop: 6 }}>Kundenattribute</h3>
-            <AttributeFields defs={attributes} values={d.attributes} onChange={(attributes) => setD({ ...d, attributes })} />
+            <AttributeFields defs={attributes} values={d.attributes} onChange={(attributes) => setD({ ...d, attributes })} fetched={d.fetched} />
           </>
         )}
         {d.id && (

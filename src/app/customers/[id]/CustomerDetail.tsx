@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText, formatDate } from "@/lib/client";
@@ -45,7 +46,30 @@ export function CustomerDetail({
   const [productDraft, setProductDraft] = useState<Partial<CustomerProduct> | null>(null);
   const [comPrefDraft, setComPrefDraft] = useState<Partial<CustomerComPref> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const router = useRouter();
   const base = `/api/customers/${customer.id}`;
+  // any «Service» attribute on customer, positions or transactions?
+  const hasServiceAttrs = [...customerAttributes, ...Object.values(attributesByType).flat(), ...Object.values(trxAttributesByType).flat()].some((d) => d.service);
+
+  async function refreshServices() {
+    setRefreshing(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const r = await api<{ records: number; values: number; errors: number; messages: string[] }>(`${base}/refresh-services`, { method: "POST" });
+      const text = `${r.values} Service-Werte geholt.`;
+      if (r.errors) setError(`${text} ${r.errors} Fehler: ${r.messages.join(" · ")}`);
+      else setInfo(text);
+      setPositions(await api<CustomerPosition[]>(`${base}/positions`));
+      router.refresh(); // customer attributes in the header
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   const reloadProducts = async () => setProducts(await api<CustomerProduct[]>(`${base}/products`));
   const reloadComPrefs = async () => setComPrefs(await api<CustomerComPref[]>(`${base}/communication-preferences`));
@@ -89,13 +113,20 @@ export function CustomerDetail({
                 .map((a) => (
                   <span key={a.id} className="badge">
                     {a.attribute}: <strong>{formatValue(a, customer.attributes[a.id])}</strong>
+                    {a.service && <span className="muted"> (Service)</span>}
                   </span>
                 ))}
             </div>
           )}
         </div>
+        {hasServiceAttrs && (
+          <button className="btn" onClick={refreshServices} disabled={refreshing} title="Alle Service-Attribute des Kunden, seiner Positionen und Transaktionen neu vom Service holen">
+            {refreshing ? "Hole Werte …" : "Service-Werte aktualisieren"}
+          </button>
+        )}
       </div>
       <Notice kind="error">{error}</Notice>
+      <Notice kind="ok">{info}</Notice>
 
       <section className="card">
         <div className="card-head">

@@ -7,6 +7,8 @@
 // Reads MONGODB_URI / MONGODB_DB from .env.local. Every document written
 // carries `sample: true`; existing types (e.g. konto) are reused with their
 // own attributes and never changed. Seeded – the same data on every run.
+// If the customer attribute «Anrede» (list with «Herr» / «Frau») exists, it is
+// set from the first name (FEMALE below) – no random numbers used for it.
 import { MongoClient, ObjectId, type Db } from "mongodb";
 
 const CUSTOMERS = 100;
@@ -49,6 +51,19 @@ const FIRST = [
   "Hans", "Markus", "Stefan", "Andreas", "Christian", "Martin", "Simon", "Lukas", "Fabian", "Reto", "Urs", "Beat", "Matteo",
   "Leon", "Elias", "Samuel", "Jonas", "Nico", "Patrick", "Roger", "Walter", "Ruth", "Heidi",
 ];
+/** first names of FIRST that get «Frau» (the others «Herr») */
+const FEMALE = new Set([
+  "Anna", "Laura", "Sara", "Lea", "Julia", "Nina", "Sandra", "Monika", "Ursula", "Claudia", "Mia", "Elena", "Sophie", "Lina",
+  "Barbara", "Petra", "Andrea", "Martina", "Chiara", "Noemi", "Ruth", "Heidi",
+]);
+
+/** The customer attribute «Anrede» when it is a list with «Herr» and «Frau», else null. */
+async function salutationAttribute(db: Db) {
+  const a = await db.collection("customerAttributes").findOne({ attribute: "Anrede" }, { collation: { locale: "de", strength: 2 } });
+  const options = (a?.options as string[] | undefined) ?? [];
+  return a && a.attributeType === "list" && options.includes("Herr") && options.includes("Frau") ? (a._id as ObjectId).toHexString() : null;
+}
+
 const LAST = [
   "Müller", "Meier", "Schmid", "Keller", "Weber", "Huber", "Schneider", "Meyer", "Steiner", "Fischer", "Gerber", "Brunner",
   "Baumann", "Frei", "Zimmermann", "Moser", "Widmer", "Wyss", "Graf", "Roth", "Suter", "Baumgartner", "Bachmann", "Studer",
@@ -328,6 +343,8 @@ async function create(db: Db) {
   const { types, comPrefCodes } = await ensureTypes(db, now);
   const usable = [...types].filter(([, t]) => t.position.length).map(([code]) => code);
   console.log(`Product types with position attributes: ${usable.join(", ")}`);
+  const anrede = await salutationAttribute(db);
+  console.log(anrede ? "Customer attribute «Anrede»: set from the first name" : "No customer attribute «Anrede» (Herr / Frau) – not set");
 
   const customers: Record<string, unknown>[] = [];
   const products: Record<string, unknown>[] = [];
@@ -341,7 +358,17 @@ async function create(db: Db) {
     const customerId = new ObjectId();
     const createdAt = new Date(now.getTime() - int(0, 3 * 365) * DAY);
     const birth = new Date(Date.UTC(int(1940, 2006), int(0, 11), int(1, 28)));
-    customers.push({ _id: customerId, name: pick(FIRST), lastname: pick(LAST), dateOfBirth: birth, createdAt, updatedAt: createdAt, sample: true });
+    const name = pick(FIRST);
+    customers.push({
+      _id: customerId,
+      name,
+      lastname: pick(LAST),
+      dateOfBirth: birth,
+      ...(anrede && { attributes: { [anrede]: FEMALE.has(name) ? "Frau" : "Herr" } }),
+      createdAt,
+      updatedAt: createdAt,
+      sample: true,
+    });
 
     let r = rnd() * totalWeight;
     const profile = PROFILES.find((p) => (r -= p.weight) < 0) ?? PROFILES[0];

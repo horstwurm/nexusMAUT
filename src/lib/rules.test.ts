@@ -157,3 +157,4 @@ describe("anniversaries (birthdays)", () => {
     expect(compareValue("date", "1980-11-15", "anniversaryLast", 365, TODAY)).toBe(true);
   });
 });
+

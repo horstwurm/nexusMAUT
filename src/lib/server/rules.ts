@@ -24,7 +24,7 @@ export type RuleDataset = {
   customers: { id: ObjectId; name: string; lastname: string; dateOfBirth: string; data: CustomerData }[];
 };
 
-/** Everything a rule can look at, loaded once. */
+/** Everything a rule can look at, loaded once («Service» attribute values are stored ones). */
 export async function loadRuleDataset(): Promise<RuleDataset> {
   const { customers, customerPositions, positionTransactions, positionAttributes, trxAttributes, customerAttributes } = await collections();
   const [cs, positions, transactions, pAttrs, tAttrs, cAttrs] = await Promise.all([

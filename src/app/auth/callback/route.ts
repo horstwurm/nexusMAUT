@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { STATE_COOKIE, startSession, upsertUser } from "@/lib/server/auth";
+import { authMode } from "@/lib/server/authSettings";
 import { safeEqual } from "@/lib/server/crypto";
 import { collections } from "@/lib/server/db";
 import { redirectTo, route } from "@/lib/server/http";
@@ -22,6 +23,7 @@ export const GET = route(async (req: Request) => {
   const { loginStates } = await collections();
   const pending = await loginStates.findOneAndDelete({ _id: state, expiresAt: { $gt: new Date() } });
   if (!pending) return fail("state");
+  if ((await authMode()) !== "nexusIdentity") return fail("mode");
 
   const { meta } = await provider();
   const iss = params.get("iss");

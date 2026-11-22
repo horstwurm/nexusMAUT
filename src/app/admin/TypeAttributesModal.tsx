@@ -22,12 +22,18 @@ type Draft = {
   options: string;
   /** list (table) attribute – only where `allowList` */
   isList: boolean;
+  /** «Service» attribute – only where `allowService` */
+  isService: boolean;
+  serviceId: string;
+  getAttrId: string;
   path: string;
   columns: ColumnDraft[];
 };
 const NEW_COLUMN: ColumnDraft = { attribute: "", attributeType: "alpha", options: "" };
-const EMPTY: Draft = { id: null, attribute: "", attributeType: "alpha", options: "", isList: false, path: "", columns: [NEW_COLUMN] };
+const EMPTY: Draft = { id: null, attribute: "", attributeType: "alpha", options: "", isList: false, isService: false, serviceId: "", getAttrId: "", path: "", columns: [NEW_COLUMN] };
 const LIST_VALUE = "__list";
+const SERVICE_VALUE = "__service";
+type ServiceOption = { id: string; name: string; attrs: TypeAttribute[] };
 
 const toSpec = (d: Draft): ListSpec =>
   normalizeListSpec({ path: d.path, columns: d.columns.map((c) => ({ attribute: c.attribute, attributeType: c.attributeType, options: c.options.split("\n") })) });
@@ -46,6 +52,8 @@ export function AttributesModal({
   fallbackCount,
   onClose,
   allowList,
+  allowService,
+  refreshKind,
 }: {
   /** e.g. /api/domains/TYPE_ID/position-attributes or /api/customer-attributes */
   base: string;
@@ -57,17 +65,42 @@ export function AttributesModal({
   onClose: (count: number) => void;
   /** offer «Liste (Tabelle)» with own columns (service GET attributes) */
   allowList?: boolean;
+  /** offer «Service» – the value comes from a simple GET attribute of a service (customer / position / trx attributes) */
+  allowService?: boolean;
+  /** with «Werte aktualisieren» per service attribute (POST /api/service-attributes/refresh) */
+  refreshKind?: "customer" | "position" | "trx";
 }) {
   const [list, setList] = useState<TypeAttribute[] | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [services, setServices] = useState<ServiceOption[]>([]);
 
   useEffect(() => {
     api<TypeAttribute[]>(base)
       .then(setList)
       .catch((err) => setError(errorText(err)));
   }, [base]);
+
+  // services with their simple GET attributes (for «Service» attributes)
+  useEffect(() => {
+    if (!allowService) return;
+    (async () => {
+      const list = await api<{ id: string; name: string }[]>("/api/services");
+      setServices(
+        await Promise.all(
+          list.map(async (sv) => ({ id: sv.id, name: sv.name, attrs: (await api<TypeAttribute[]>(`/api/services/${sv.id}/get-attributes`)).filter((a) => !a.list) })),
+        ),
+      );
+    })().catch((err) => setError(errorText(err)));
+  }, [allowService]);
+
+  const sourceText = (src: NonNullable<TypeAttribute["service"]>) => {
+    const sv = services.find((x) => x.id === src.serviceId);
+    return `${sv?.name ?? "…"} › ${sv?.attrs.find((a) => a.id === src.attrId)?.attribute ?? "…"}`;
+  };
+  const draftService = services.find((x) => x.id === draft.serviceId);
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -107,6 +140,7 @@ export function AttributesModal({
         <h2>{title}</h2>
         <p className="small muted">{hint}</p>
         <Notice kind="error">{error}</Notice>
+        <Notice kind="ok">{info}</Notice>
 
         {list === null ? (
           <p className="empty">Lädt …</p>
@@ -130,7 +164,12 @@ export function AttributesModal({
                       <strong>{a.attribute}</strong>
                     </td>
                     <td>
-                      {a.list ? (
+                      {a.service ? (
+                        <>
+                          <span className="badge badge-accent">Service</span> <span className="small">{sourceText(a.service)}</span>
+                          <div className="small muted">{ATTRIBUTE_TYPES[a.attributeType]} – Wert vom Service, im Formular nur lesbar</div>
+                        </>
+                      ) : a.list ? (
                         <>
                           <span className="badge badge-accent">Liste</span>{" "}
                           <span className="small muted">
@@ -165,6 +204,32 @@ export function AttributesModal({
                         <button className="btn btn-sm" disabled={busy || i === list.length - 1} onClick={() => move(i, 1)} aria-label="Nach unten">
                           ↓
                         </button>
+                        {a.service && refreshKind && (
+                          <button
+                            className="btn btn-sm"
+                            disabled={busy}
+                            title="Den Wert bei allen Datensätzen neu vom Service holen"
+                            onClick={async () => {
+                              setBusy(true);
+                              setError(null);
+                              setInfo(null);
+                              try {
+                                const r = await api<{ records: number; values: number; errors: number; messages: string[] }>("/api/service-attributes/refresh", {
+                                  body: { kind: refreshKind, attrId: a.id },
+                                });
+                                const text = `«${a.attribute}»: ${r.values} Werte geholt bei ${r.records} Datensätzen.`;
+                                if (r.errors) setError(`${text} ${r.errors} Fehler: ${r.messages.join(" · ")}`);
+                                else setInfo(text);
+                              } catch (err) {
+                                setError(errorText(err));
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Werte aktualisieren
+                          </button>
+                        )}
                         <button
                           className="btn btn-sm"
                           disabled={busy}
@@ -175,6 +240,9 @@ export function AttributesModal({
                               attributeType: a.attributeType,
                               options: a.options.join("\n"),
                               isList: Boolean(a.list),
+                              isService: Boolean(a.service),
+                              serviceId: a.service?.serviceId ?? "",
+                              getAttrId: a.service?.attrId ?? "",
                               path: a.list?.path ?? "",
                               columns: a.list?.columns.map((c) => ({ ...c, options: c.options.join("\n") })) ?? [NEW_COLUMN],
                             })
@@ -205,13 +273,16 @@ export function AttributesModal({
           style={{ marginTop: 16 }}
           onSubmit={async (e) => {
             e.preventDefault();
-            const body = draft.isList
+            const body = draft.isService
+              ? { attribute: draft.attribute, attributeType: "alpha", options: [], service: { serviceId: draft.serviceId, attrId: draft.getAttrId } }
+              : draft.isList
               ? { attribute: draft.attribute, attributeType: "alpha", options: [], list: toSpec(draft) }
               : {
                   attribute: draft.attribute,
                   attributeType: draft.attributeType,
                   options: draft.attributeType === "list" ? optionList : [],
                   ...(allowList && { list: null }),
+                  ...(allowService && { service: null }),
                 };
             const ok = await act(() => api(draft.id ? `${base}/${draft.id}` : base, { method: draft.id ? "PUT" : "POST", body }));
             if (ok) setDraft(EMPTY);
@@ -233,11 +304,13 @@ export function AttributesModal({
             <label className="field">
               <span>Attributtyp</span>
               <select
-                value={draft.isList ? LIST_VALUE : draft.attributeType}
+                value={draft.isService ? SERVICE_VALUE : draft.isList ? LIST_VALUE : draft.attributeType}
                 onChange={(e) =>
-                  e.target.value === LIST_VALUE
-                    ? setDraft({ ...draft, isList: true })
-                    : setDraft({ ...draft, isList: false, attributeType: e.target.value as AttributeType })
+                  e.target.value === SERVICE_VALUE
+                    ? setDraft({ ...draft, isService: true, isList: false })
+                    : e.target.value === LIST_VALUE
+                      ? setDraft({ ...draft, isList: true, isService: false })
+                      : setDraft({ ...draft, isList: false, isService: false, attributeType: e.target.value as AttributeType })
                 }
               >
                 {ATTRIBUTE_TYPE_NAMES.map((t) => (
@@ -246,9 +319,47 @@ export function AttributesModal({
                   </option>
                 ))}
                 {allowList && <option value={LIST_VALUE}>Liste (Tabelle mit Spalten)</option>}
+                {allowService && <option value={SERVICE_VALUE}>Service (Wert von einem Service)</option>}
               </select>
             </label>
           </div>
+          {draft.isService && (
+            <div className="grid2">
+              <label className="field">
+                <span>Service</span>
+                <select
+                  value={draft.serviceId}
+                  onChange={(e) => {
+                    const sv = services.find((x) => x.id === e.target.value);
+                    setDraft({ ...draft, serviceId: e.target.value, getAttrId: sv?.attrs[0]?.id ?? "" });
+                  }}
+                >
+                  <option value="">– Service wählen –</option>
+                  {services.map((sv) => (
+                    <option key={sv.id} value={sv.id} disabled={!sv.attrs.length}>
+                      {sv.name}
+                      {!sv.attrs.length ? " (keine einfachen GET-Attribute)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>GET-Attribut</span>
+                <select value={draft.getAttrId} onChange={(e) => setDraft({ ...draft, getAttrId: e.target.value })} disabled={!draftService}>
+                  {!draftService && <option value="">–</option>}
+                  {draftService?.attrs.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.attribute} ({ATTRIBUTE_TYPES[a.attributeType]})
+                    </option>
+                  ))}
+                </select>
+                <span className="hint">
+                  Typ und Optionen kommen vom GET-Attribut. PUT-Werte für den Aufruf werden nach Namen aus dem Datensatz genommen (Transaktion → Position →
+                  Kunde). Der Wert wird gespeichert und beim Speichern des Datensatzes oder mit «Werte aktualisieren» neu geholt.
+                </span>
+              </label>
+            </div>
+          )}
           {draft.isList && (
             <>
               <label className="field" style={{ maxWidth: 420 }}>
@@ -316,7 +427,7 @@ export function AttributesModal({
               </div>
             </>
           )}
-          {!draft.isList && draft.attributeType === "list" && (
+          {!draft.isList && !draft.isService && draft.attributeType === "list" && (
             <label className="field">
               <span>Optionen</span>
               <textarea
@@ -337,7 +448,11 @@ export function AttributesModal({
             )}
             <button
               className="btn btn-primary"
-              disabled={busy || !draft.attribute.trim() || (draft.isList ? Boolean(listProblem) : draft.attributeType === "list" && !optionList.length)}
+              disabled={
+                busy ||
+                !draft.attribute.trim() ||
+                (draft.isService ? !draft.getAttrId : draft.isList ? Boolean(listProblem) : draft.attributeType === "list" && !optionList.length)
+              }
             >
               {draft.id ? "Speichern" : "Hinzufügen"}
             </button>
@@ -365,6 +480,8 @@ export function TypeAttributesModal({ type, kind, onClose }: { type: DomainValue
       newLabel={`Neues ${kind === "position" ? "Positions" : "Transaktions"}attribut`}
       fallbackCount={type.attributeCounts?.[kind] ?? 0}
       onClose={onClose}
+      allowService
+      refreshKind={kind}
     />
   );
 }

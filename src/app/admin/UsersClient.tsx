@@ -3,9 +3,7 @@
 import { useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText, formatDate } from "@/lib/client";
-import type { Me } from "@/lib/types";
-
-type Row = Me & { lastLoginAt: string };
+import type { Me, UserRow as Row } from "@/lib/types";
 
 const ROLES: { value: Me["role"]; label: string }[] = [
   { value: "pending", label: "Kein Zugang" },
@@ -28,7 +26,7 @@ export function UsersClient({ meId, initial }: { meId: string; initial: Row[] })
   }
 
   async function remove(u: Row) {
-    if (!window.confirm(`${u.email} entfernen? Bei der nächsten Anmeldung erscheint die Person wieder ohne Zugang.`)) return;
+    if (!window.confirm(`${u.email} entfernen? Bei einer erneuten Anmeldung über nexusIdentity erscheint die Person wieder ohne Zugang; ein eigenes Konto (Passwort) ist gelöscht.`)) return;
     setError(null);
     try {
       await api(`/api/users/${encodeURIComponent(u.id)}`, { method: "DELETE" });
@@ -46,6 +44,7 @@ export function UsersClient({ meId, initial }: { meId: string; initial: Row[] })
           <thead>
             <tr>
               <th>Name</th>
+              <th>Anmeldung</th>
               <th>Zuletzt angemeldet</th>
               <th>Rolle</th>
               <th />
@@ -57,6 +56,12 @@ export function UsersClient({ meId, initial }: { meId: string; initial: Row[] })
                 <td>
                   {u.name}
                   <div className="small muted">{u.email}</div>
+                </td>
+                <td>
+                  <span className="row" style={{ gap: 4 }}>
+                    {u.nexusIdentity && <span className="badge">nexusIdentity</span>}
+                    {u.hasPassword && <span className="badge">Passwort</span>}
+                  </span>
                 </td>
                 <td>{formatDate(u.lastLoginAt, true)}</td>
                 <td>

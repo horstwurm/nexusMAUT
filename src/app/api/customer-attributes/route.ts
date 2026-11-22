@@ -3,12 +3,14 @@ import { requireUser } from "@/lib/server/auth";
 import { collections } from "@/lib/server/db";
 import { toTypeAttribute } from "@/lib/server/domains";
 import { HttpError, NO_STORE, readJson, route } from "@/lib/server/http";
-import { typeAttributeInput } from "@/lib/server/schemas";
+import { sourcedAttributeInput } from "@/lib/server/schemas";
+import { resolveAttributeSource } from "@/lib/server/serviceSources";
 
 // Customer attributes (relation customerAttributes): attributes every customer
 // can have, values in `customers.attributes`. Same shape as type attributes.
 // GET  /api/customer-attributes – list in order (editors)
-// POST /api/customer-attributes { attribute, attributeType, options? } – add (admins)
+// POST /api/customer-attributes { attribute, attributeType, options?, service? { serviceId, attrId } } – add (admins)
+//      with `service`: a «Service» attribute – value fetched from that GET attribute
 
 export const GET = route(async () => {
   await requireUser();
@@ -19,7 +21,7 @@ export const GET = route(async () => {
 
 export const POST = route(async (req: Request) => {
   await requireUser("admin");
-  const input = await readJson(req, typeAttributeInput);
+  const input = await resolveAttributeSource(await readJson(req, sourcedAttributeInput));
   const { customerAttributes } = await collections();
   const last = await customerAttributes.find().sort({ sort: -1 }).limit(1).next();
   const now = new Date();

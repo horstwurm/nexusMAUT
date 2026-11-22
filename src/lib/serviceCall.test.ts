@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttributeDef } from "./positions";
-import { buildRequest, isUnavailable, listSpecProblem, mapResponse, mockResponse, type ServiceAttrDef } from "./serviceCall";
+import { buildRequest, isUnavailable, listSpecProblem, mapResponse, mockResponse, randomResponse, type ServiceAttrDef } from "./serviceCall";
 
 const def = (id: string, attribute: string, attributeType: AttributeDef["attributeType"], options: string[] = []): AttributeDef => ({
   id,
@@ -120,5 +120,34 @@ describe("list attributes", () => {
     expect(listSpecProblem({ path: "a..b", columns: securities.list!.columns })).toMatch(/Pfad/);
     expect(listSpecProblem({ path: "", columns: [securities.list!.columns[0], { ...securities.list!.columns[0], attribute: "isin" }] })).toMatch(/zweimal/);
     expect(listSpecProblem({ path: "", columns: [{ attribute: "X", attributeType: "list", options: [] }] })).toMatch(/Option/);
+  });
+});
+
+describe("randomResponse (Mock services)", () => {
+  // deterministic generator for the test
+  const seq = (...xs: number[]) => {
+    let i = 0;
+    return () => xs[i++ % xs.length];
+  };
+  const defs = [
+    { id: "1", attribute: "Saldo", attributeType: "num" as const, options: [] },
+    { id: "2", attribute: "VIP", attributeType: "bool" as const, options: [] },
+    { id: "3", attribute: "Stufe", attributeType: "list" as const, options: ["Gold", "Silber"] },
+    { id: "4", attribute: "Seit", attributeType: "date" as const, options: [] },
+    { id: "5", attribute: "Depot", attributeType: "alpha" as const, options: [], list: { path: "", columns: [{ attribute: "ISIN", attributeType: "alpha" as const, options: [] }] } },
+  ];
+  it("gives a valid random value per GET attribute", () => {
+    const json = randomResponse(defs, "2026-11-22", seq(0.5, 0.2, 0.9, 0.5, 0.1, 0.3));
+    const mapped = mapResponse(defs, json).values;
+    expect(mapped.every((m) => m.status === "ok")).toBe(true);
+    expect(typeof json.Saldo).toBe("number");
+    expect(["Gold", "Silber"]).toContain(json.Stufe);
+    expect(String(json.Seit)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(Array.isArray(json.Depot)).toBe(true);
+  });
+  it("differs between calls", () => {
+    const a = randomResponse(defs);
+    const b = randomResponse(defs);
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
   });
 });

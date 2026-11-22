@@ -1,5 +1,5 @@
 import "server-only";
-import { MongoClient, type Db, type ObjectId } from "mongodb";
+import { MongoClient, ObjectId, type Db } from "mongodb";
 import type { DomainName } from "@/lib/domains";
 import type { PositionValues } from "@/lib/positions";
 import type { Condition } from "@/lib/rules";
@@ -12,8 +12,10 @@ import type { AttributeType } from "@/lib/typeAttributes";
 export type Role = "admin" | "editor" | "pending";
 
 /**
- * A person who logged in via nexusIdentity. `_id` = the `sub` claim (the
- * stable user key there). Roles live here, not in nexusIdentity.
+ * A person with access to nexusMAUT. Logged in via nexusIdentity: `_id` = the
+ * `sub` claim (the stable user key there). Registered here (own login):
+ * `_id` = "local_…"; linked to nexusIdentity later via `oidcSub`. Roles live
+ * here, not in nexusIdentity.
  */
 export type UserDoc = {
   _id: string;
@@ -21,6 +23,11 @@ export type UserDoc = {
   name: string;
   /** pending = logged in, waiting for an admin to give access */
   role: Role;
+  /** own login (passwords.ts: scrypt) – set by registration, «Mein Konto» or a reset link */
+  passwordHash?: string;
+  passwordChangedAt?: Date;
+  /** nexusIdentity `sub` of a user registered here (linked by verified e-mail) */
+  oidcSub?: string;
   createdAt: Date;
   lastLoginAt: Date;
 };
@@ -29,9 +36,35 @@ export type UserDoc = {
 export type SessionDoc = {
   _id: string;
   userId: string;
-  /** For `id_token_hint` at single sign-out */
-  idToken: string;
+  /** For `id_token_hint` at single sign-out; none after a password login */
+  idToken?: string;
   expiresAt: Date;
+};
+
+export type AuthMode = "nexusIdentity" | "local";
+
+/** How people log in (Admin → Anmeldung; `settings` doc `_id: "auth"`). */
+export type AuthSettingsDoc = {
+  _id: "auth";
+  mode: AuthMode;
+  /** own login: anyone may create an account (it waits for a role) */
+  allowRegistration: boolean;
+  updatedAt: Date;
+  updatedBy: string;
+};
+
+/** An open «Passwort vergessen» link (sha256 of the token, single use, 60 min). */
+export type PasswordResetDoc = {
+  _id: string;
+  userId: string;
+  expiresAt: Date;
+};
+
+/** A failed password login (throttling; removed after 15 min). */
+export type LoginFailureDoc = {
+  _id: ObjectId;
+  email: string;
+  at: Date;
 };
 
 /** Running login at nexusIdentity (state → this, 10 min). */
@@ -52,6 +85,7 @@ export type CustomerDoc = {
   dateOfBirth: Date;
   /** values of the customer attributes (`customerAttributes._id` → value); missing = none set */
   attributes?: PositionValues;
+  serviceFetched?: ServiceFetched;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -81,13 +115,23 @@ export type DomainValueDoc = {
  * productServiceTypePositionAttributes (values in `customerPositions`) and
  * productServiceTypeTrxAttributes (values in `positionTransactions`). `options` only for attributeType "list".
  */
+/** Where a «Service» attribute's value comes from: a simple GET attribute of a service. */
+export type ServiceSource = { serviceId: ObjectId; attrId: ObjectId };
+
+/** When / how a service attribute value was last fetched (per attribute id, on the record). */
+/** `mock`: the stored value is a random value of a «Mock» service, not a real answer */
+export type ServiceFetched = Record<string, { at: Date; error: string | null; mock?: boolean }>;
+
 export type TypeAttributeDoc = {
   _id: ObjectId;
   /** `domainValues._id` of the productServiceType value */
   typeId: ObjectId;
   attribute: string;
+  /** for a service attribute: the GET attribute's type (copied, kept in sync) */
   attributeType: AttributeType;
   options: string[];
+  /** customer / position / trx attributes: value fetched from a service (read-only in forms) */
+  service?: ServiceSource | null;
   sort: number;
   createdAt: Date;
   updatedAt: Date;
@@ -115,6 +159,7 @@ export type CustomerPositionDoc = {
   /** code of domain `productServiceType` */
   productServiceType: string;
   values: PositionValues;
+  serviceFetched?: ServiceFetched;
   sort: number;
   createdAt: Date;
   updatedAt: Date;
@@ -131,6 +176,7 @@ export type PositionTransactionDoc = {
   /** denormalised for deleting with the customer */
   customerId: ObjectId;
   values: PositionValues;
+  serviceFetched?: ServiceFetched;
   sort: number;
   createdAt: Date;
   updatedAt: Date;
@@ -190,6 +236,8 @@ export type ServiceDoc = {
   serviceType: string;
   /** http(s) address; "" = none (missing on services created before 2026-11-21) */
   url?: string;
+  /** «Mock»: the service isn't called – random values instead (missing = off) */
+  mock?: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -243,6 +291,29 @@ export type CustomerJourneyStepDoc = {
   unfilled: string[];
   doneAt: Date | null;
   note: string;
+  /**
+   * Result of «Daten prüfen»: are the data the step needs there for the
+   * customer? (missing on older docs = unchecked)
+   */
+  dataStatus?: "unchecked" | "ok" | "error";
+  /** what is missing (placeholder: reason / service error) */
+  dataProblems?: string[];
+  dataCheckedAt?: Date | null;
+  updatedAt: Date;
+};
+
+/** A customer's feedback on a step of a KundenJourney (relation customerFeedback). */
+export type CustomerFeedbackDoc = {
+  _id: ObjectId;
+  customerJourneyStepId: ObjectId;
+  customerJourneyId: ObjectId;
+  customerId: ObjectId;
+  feedback: string;
+  feedbackComment: string;
+  /** 1 … 5, null = no rating */
+  feedbackRating: number | null;
+  createdBy: string;
+  createdAt: Date;
   updatedAt: Date;
 };
 
@@ -334,9 +405,58 @@ async function movePositionsToCustomers(db: Db) {
   console.log(`[db] moved ${moved} positions from productPositions to customerPositions${orphans ? ` (${orphans} orphans dropped)` : ""}`);
 }
 
+/**
+ * Until 2026-11 Kunden Selektionen had service conditions ({ level: "service",
+ * serviceId, attrId, op, value }). Service values are now «Service» customer
+ * attributes: each such condition becomes a condition on a customer attribute
+ * fed by the same GET attribute (reused, or created with the GET attribute's
+ * name). The values are fetched later (Admin «Werte aktualisieren» / saving).
+ */
+async function convertServiceConditions(db: Db) {
+  const rules = db.collection<{ _id: ObjectId; conditions: Record<string, unknown>[] }>("rules");
+  const list = await rules.find({ "conditions.level": "service" }).toArray();
+  if (!list.length) return;
+  const attrs = db.collection<CustomerAttributeDoc>("customerAttributes");
+  const getAttrs = db.collection<ServiceAttributeDoc>("serviceGetAttributes");
+  for (const rule of list) {
+    const conditions = [];
+    for (const cond of rule.conditions) {
+      if (cond.level !== "service") {
+        conditions.push(cond);
+        continue;
+      }
+      const serviceId = ObjectId.isValid(String(cond.serviceId)) ? new ObjectId(String(cond.serviceId)) : null;
+      const attrId = ObjectId.isValid(String(cond.attrId)) ? new ObjectId(String(cond.attrId)) : null;
+      const getAttr = serviceId && attrId ? await getAttrs.findOne({ _id: attrId, serviceId }) : null;
+      if (!getAttr || getAttr.list) continue; // deleted service / attribute: the condition matched nothing anyway
+      let attr = await attrs.findOne({ "service.attrId": attrId });
+      if (!attr) {
+        const taken = await attrs.findOne({ attribute: getAttr.attribute }, { collation: { locale: "de", strength: 2 } });
+        const last = await attrs.find().sort({ sort: -1 }).limit(1).next();
+        const now = new Date();
+        attr = {
+          _id: new ObjectId(),
+          attribute: taken ? `${getAttr.attribute} (Service)` : getAttr.attribute,
+          attributeType: getAttr.attributeType,
+          options: getAttr.options,
+          service: { serviceId: serviceId!, attrId: attrId! },
+          sort: last ? last.sort + 10 : 10,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await attrs.insertOne(attr);
+      }
+      conditions.push({ level: "customer", field: "attribute", attrId: attr._id.toHexString(), op: cond.op, value: cond.value });
+    }
+    await rules.updateOne({ _id: rule._id }, { $set: { conditions, updatedAt: new Date() } });
+    console.log(`[db] Kunden Selektion ${rule._id.toHexString()}: service conditions → «Service» customer attributes`);
+  }
+}
+
 async function init(db: Db) {
   await renameOld(db);
   await movePositionsToCustomers(db);
+  await convertServiceConditions(db);
   const c = collectionsOf(db);
   // an attribute name once per type, case-insensitive
   const attributeIndexes = (col: Collections["positionAttributes"]) => [
@@ -353,6 +473,11 @@ async function init(db: Db) {
     c.sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     c.sessions.createIndex({ userId: 1 }),
     c.loginStates.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    c.users.createIndex({ oidcSub: 1 }, { sparse: true }),
+    c.passwordResets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+    c.passwordResets.createIndex({ userId: 1 }),
+    c.loginFailures.createIndex({ at: 1 }, { expireAfterSeconds: 15 * 60 }),
+    c.loginFailures.createIndex({ email: 1, at: 1 }),
     c.customers.createIndex({ lastname: 1, name: 1 }),
     // an attribute name once, case-insensitive
     c.customerAttributes.createIndex({ attribute: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "customer_attribute_unique" }),
@@ -394,6 +519,9 @@ async function init(db: Db) {
     c.customerJourneys.createIndex({ startedAt: -1 }),
     c.customerJourneySteps.createIndex({ customerJourneyId: 1, sort: 1 }),
     c.customerJourneySteps.createIndex({ customerId: 1 }),
+    c.customerFeedbacks.createIndex({ customerJourneyStepId: 1, createdAt: 1 }),
+    c.customerFeedbacks.createIndex({ customerJourneyId: 1 }),
+    c.customerFeedbacks.createIndex({ customerId: 1 }),
   ]);
 }
 
@@ -402,6 +530,8 @@ function collectionsOf(db: Db) {
     users: db.collection<UserDoc>("users"),
     sessions: db.collection<SessionDoc>("sessions"),
     loginStates: db.collection<LoginStateDoc>("loginStates"),
+    passwordResets: db.collection<PasswordResetDoc>("passwordResets"),
+    loginFailures: db.collection<LoginFailureDoc>("loginFailures"),
     customers: db.collection<CustomerDoc>("customers"),
     customerAttributes: db.collection<CustomerAttributeDoc>("customerAttributes"),
     customerProducts: db.collection<CustomerProductDoc>("customerProducts"),
@@ -414,11 +544,14 @@ function collectionsOf(db: Db) {
     rules: db.collection<RuleDoc>("rules"),
     actions: db.collection<ActionDoc>("actions"),
     settings: db.collection<MailSettingsDoc>("settings"),
+    /** same collection as `settings`, the doc `_id: "auth"` */
+    authSettings: db.collection<AuthSettingsDoc>("settings"),
     actionAttributes: db.collection<ActionAttributeDoc>("actionAttributes"),
     journeys: db.collection<JourneyDoc>("journeys"),
     journeySteps: db.collection<JourneyStepDoc>("journeySteps"),
     customerJourneys: db.collection<CustomerJourneyDoc>("customerJourneys"),
     customerJourneySteps: db.collection<CustomerJourneyStepDoc>("customerJourneySteps"),
+    customerFeedbacks: db.collection<CustomerFeedbackDoc>("customerFeedbacks"),
     services: db.collection<ServiceDoc>("services"),
     servicePutAttributes: db.collection<ServiceAttributeDoc>("servicePutAttributes"),
     serviceGetAttributes: db.collection<ServiceAttributeDoc>("serviceGetAttributes"),

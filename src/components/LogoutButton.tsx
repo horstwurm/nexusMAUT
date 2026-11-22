@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/client";
 
-/** Ends our session, then the single sign-on session at nexusIdentity. */
+/** Ends our session, then (after a nexusIdentity login) the single sign-on session there. */
 export function LogoutButton() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);

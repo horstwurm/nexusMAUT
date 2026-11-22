@@ -5,9 +5,9 @@ import { Fragment, useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText } from "@/lib/client";
 import { labelOf } from "@/lib/domains";
-import { formatValue, type AttributeDef, type PositionValue } from "@/lib/positions";
-import type { CustomerPosition, DomainValue } from "@/lib/types";
-import { AttributeFields, formValues, type FormValue } from "./AttributeFields";
+import type { AttributeDef, PositionValue } from "@/lib/positions";
+import type { CustomerPosition, DomainValue, ServiceFetchedView } from "@/lib/types";
+import { AttrCell, AttrHeader, AttributeFields, formValues, type FormValue } from "./AttributeFields";
 import { Transactions } from "./Transactions";
 
 export type AttributesByType = Record<string, AttributeDef[]>;
@@ -122,9 +122,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
                       <th style={{ width: 1 }} aria-label="Transaktionen aufklappen" />
                       <th className="num">#</th>
                       {defs.map((d) => (
-                        <th key={d.id} className={d.attributeType === "num" ? "num" : ""}>
-                          {d.attribute}
-                        </th>
+                        <AttrHeader key={d.id} def={d} />
                       ))}
                       {!defs.length && <th>Werte</th>}
                       <th />
@@ -146,9 +144,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
                           </td>
                           <td className="num muted">{i + 1}</td>
                           {defs.map((d) => (
-                            <td key={d.id} className={d.attributeType === "num" ? "num" : ""}>
-                              {formatValue(d, p.values[d.id])}
-                            </td>
+                            <AttrCell key={d.id} def={d} value={p.values[d.id]} fetched={p.serviceFetched} />
                           ))}
                           {!defs.length && <td className="small muted">Typ ohne Positionsattribute</td>}
                           <td>
@@ -213,6 +209,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
           initialValues={editing === "new" ? {} : editing.values}
           originalType={editing === "new" ? undefined : editing.productServiceType}
           typeLocked={editing !== "new" && (editing.transactionCount ?? 0) > 0}
+          fetched={editing === "new" ? undefined : editing.serviceFetched}
           onClose={() => setEditing(null)}
           onSave={async (productServiceType, values) => {
             await api(editing === "new" ? url : `${url}/${editing.id}`, {
@@ -291,6 +288,7 @@ export function PositionModal({
   initialValues,
   originalType,
   typeLocked,
+  fetched,
   onClose,
   onSave,
 }: {
@@ -303,6 +301,8 @@ export function PositionModal({
   originalType?: string;
   /** the position has transactions: its type can't change */
   typeLocked?: boolean;
+  /** when its «Service» attribute values were fetched */
+  fetched?: ServiceFetchedView;
   onClose: () => void;
   onSave: (productServiceType: string, values: Record<string, FormValue>) => Promise<void>;
 }) {
@@ -351,7 +351,7 @@ export function PositionModal({
         </label>
 
         {type && !defs.length && <Notice kind="warn">Dieser Typ hat keine Positionsattribute.</Notice>}
-        <AttributeFields defs={defs} values={values} onChange={setValues} />
+        <AttributeFields defs={defs} values={values} onChange={setValues} fetched={fetched} />
         {defs.length > 0 && <p className="small muted">Leere Felder bleiben leer; mindestens ein Wert ist nötig.</p>}
         <div className="actions">
           <button type="button" className="btn" onClick={onClose}>

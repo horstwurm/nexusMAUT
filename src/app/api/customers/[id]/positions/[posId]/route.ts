@@ -6,6 +6,7 @@ import { collections } from "@/lib/server/db";
 import { assertDomainValue } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { customerPositionInput } from "@/lib/server/schemas";
+import { refreshPosition } from "@/lib/server/serviceAttributes";
 
 // PUT    /api/customers/ID/positions/POS { productServiceType, values } – replace (a new
 //        type is fine while there are no transactions: the values are checked against its attributes)
@@ -41,7 +42,8 @@ export const PUT = route(async (req: Request, ctx: Ctx) => {
     { returnDocument: "after" },
   );
   if (!doc) throw new HttpError(404, "Nicht gefunden");
-  return Response.json(toCustomerPosition(doc), { headers: NO_STORE });
+  await refreshPosition(doc._id); // «Service» position attributes
+  return Response.json(toCustomerPosition((await customerPositions.findOne({ _id: doc._id }))!), { headers: NO_STORE });
 });
 
 export const PATCH = route(async (req: Request, ctx: Ctx) => {

@@ -9,13 +9,13 @@ import type { DomainValue, ServiceView } from "@/lib/types";
 import { ServiceCallModal } from "./ServiceCallModal";
 import { AttributesModal } from "./TypeAttributesModal";
 
-type Draft = { id: string | null; name: string; serviceType: string; url: string };
+type Draft = { id: string | null; name: string; serviceType: string; url: string; mock: boolean };
 const BASE = "/api/services";
 
 /** Admin tab «Services»: name, service type, PUT / GET attributes. */
 export function ServicesAdmin({ initial, types }: { initial: ServiceView[]; types: DomainValue[] }) {
   const activeTypes = types.filter((t) => t.active);
-  const empty = (): Draft => ({ id: null, name: "", serviceType: activeTypes[0]?.code ?? "", url: "" });
+  const empty = (): Draft => ({ id: null, name: "", serviceType: activeTypes[0]?.code ?? "", url: "", mock: false });
   const [list, setList] = useState(initial);
   const [draft, setDraft] = useState<Draft>(empty);
   const [attributesOf, setAttributesOf] = useState<{ service: ServiceView; kind: ServiceAttributeKind } | null>(null);
@@ -70,6 +70,11 @@ export function ServicesAdmin({ initial, types }: { initial: ServiceView[]; type
                 <tr key={s.id}>
                   <td>
                     <strong>{s.name}</strong>
+                    {s.mock && (
+                      <span className="badge badge-warn" style={{ marginLeft: 6 }} title="Wird nicht aufgerufen – liefert Zufallswerte">
+                        Mock
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span className="badge badge-accent">{labelOf(types, s.serviceType)}</span>
@@ -88,9 +93,9 @@ export function ServicesAdmin({ initial, types }: { initial: ServiceView[]; type
                     <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: 4 }}>
                       <button
                         className="btn btn-sm btn-primary"
-                        disabled={busy || !s.url}
+                        disabled={busy || (!s.url && !s.mock)}
                         onClick={() => setTesting(s)}
-                        title={s.url ? "Service mit Testwerten aufrufen" : "Zuerst eine URL erfassen"}
+                        title={s.mock ? "Mock: liefert Zufallswerte" : s.url ? "Service mit Testwerten aufrufen" : "Zuerst eine URL erfassen"}
                       >
                         Testen
                       </button>
@@ -105,7 +110,7 @@ export function ServicesAdmin({ initial, types }: { initial: ServiceView[]; type
                           {SERVICE_ATTRIBUTE_KINDS[kind].title} ({s.attributeCounts[kind]})
                         </button>
                       ))}
-                      <button className="btn btn-sm" disabled={busy} onClick={() => setDraft({ id: s.id, name: s.name, serviceType: s.serviceType, url: s.url })}>
+                      <button className="btn btn-sm" disabled={busy} onClick={() => setDraft({ id: s.id, name: s.name, serviceType: s.serviceType, url: s.url, mock: s.mock })}>
                         Bearbeiten
                       </button>
                       <button
@@ -151,7 +156,7 @@ export function ServicesAdmin({ initial, types }: { initial: ServiceView[]; type
         style={{ marginTop: 16 }}
         onSubmit={async (e) => {
           e.preventDefault();
-          const body = { name: draft.name, serviceType: draft.serviceType, url: draft.url };
+          const body = { name: draft.name, serviceType: draft.serviceType, url: draft.url, mock: draft.mock };
           const ok = await act(() => api(draft.id ? `${BASE}/${draft.id}` : BASE, { method: draft.id ? "PUT" : "POST", body }));
           if (ok) setDraft(empty());
         }}
@@ -190,6 +195,16 @@ export function ServicesAdmin({ initial, types }: { initial: ServiceView[]; type
             placeholder="https://api.example.ch/kunden (optional)"
             className="mono"
           />
+        </label>
+        <label className="switch-field">
+          <input type="checkbox" role="switch" className="switch" checked={draft.mock} onChange={(e) => setDraft({ ...draft, mock: e.target.checked })} />
+          <span>
+            <strong>Mock</strong>
+            <span className="hint" style={{ display: "block" }}>
+              Der Service wird nicht aufgerufen, sondern liefert bei jedem Aufruf Zufallswerte passend zu den GET-Attributen – zum Ausprobieren, solange
+              der echte Service fehlt. Service-Attribute speichern diese Werte.
+            </span>
+          </span>
         </label>
         <div className="row" style={{ justifyContent: "flex-end" }}>
           {draft.id && (

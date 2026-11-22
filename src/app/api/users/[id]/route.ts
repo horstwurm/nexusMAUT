@@ -24,9 +24,9 @@ export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   const me = await requireUser("admin");
   const id = (await ctx.params).id;
   if (id === me._id) throw new HttpError(400, "Das eigene Konto kann nicht entfernt werden");
-  const { users, sessions } = await collections();
+  const { users, sessions, passwordResets } = await collections();
   const res = await users.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
-  await sessions.deleteMany({ userId: id });
+  await Promise.all([sessions.deleteMany({ userId: id }), passwordResets.deleteMany({ userId: id })]);
   return new Response(null, { status: 204 });
 });

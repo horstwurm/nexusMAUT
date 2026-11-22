@@ -10,7 +10,8 @@ import { CALL_METHODS } from "@/lib/serviceCall";
 // the service (admins, «Testen» in Admin) via `callService`: PUT attributes
 // by name as JSON body (GET: query parameters), the JSON response mapped onto
 // the GET attributes. Answers 200 also when the service fails – the result
-// says what happened; not available → `mock` with sample data.
+// says what happened; not available → `mock` with sample data. A service with
+// «Mock» switched on isn't called: `random: true` and random values.
 
 export const maxDuration = 30;
 
@@ -22,10 +23,10 @@ const callInput = z.object({
 export const POST = route(async (req: Request, ctx: { params: Promise<{ id: string }> }) => {
   await requireUser("admin");
   const service = await requireService(parseId((await ctx.params).id));
-  if (!service.url) throw new HttpError(400, "Für diesen Service ist keine URL erfasst");
+  if (!service.url && !service.mock) throw new HttpError(400, "Für diesen Service ist keine URL erfasst");
   const { method, values: input } = await readJson(req, callInput);
   const [putDefs, getDefs] = await Promise.all([serviceAttributeDefs(service._id, "put"), serviceAttributeDefs(service._id, "get")]);
   const parsed = parseAttributeValues(putDefs, input);
   if ("error" in parsed) throw new HttpError(400, parsed.error);
-  return Response.json(await callService(service.url, method, putDefs, getDefs, parsed.values), { headers: NO_STORE });
+  return Response.json(await callService(service.url ?? "", method, putDefs, getDefs, parsed.values, { mock: service.mock }), { headers: NO_STORE });
 });

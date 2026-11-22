@@ -6,6 +6,7 @@ import { collections } from "@/lib/server/db";
 import { assertDomainValue } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { customerPositionInput } from "@/lib/server/schemas";
+import { refreshPosition } from "@/lib/server/serviceAttributes";
 
 // Positions of a customer: a product/service type and values of that type's
 // position attributes (productServiceTypePositionAttributes).
@@ -44,5 +45,6 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     updatedAt: now,
   };
   await customerPositions.insertOne(doc);
-  return Response.json({ ...toCustomerPosition(doc), transactionCount: 0 }, { status: 201, headers: NO_STORE });
+  await refreshPosition(doc._id); // «Service» position attributes
+  return Response.json({ ...toCustomerPosition((await customerPositions.findOne({ _id: doc._id }))!), transactionCount: 0 }, { status: 201, headers: NO_STORE });
 });

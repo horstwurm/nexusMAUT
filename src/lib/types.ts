@@ -13,6 +13,7 @@ export type Customer = {
   dateOfBirth: string;
   /** customer attribute id → value */
   attributes: Record<string, string | number | boolean>;
+  serviceFetched?: ServiceFetchedView;
   /** number of positions (customer list only) */
   positionCount?: number;
   createdAt: string;
@@ -42,7 +43,13 @@ export type TypeAttribute = {
   sort: number;
   /** service GET attributes only: a list (table) with columns */
   list?: ListSpec | null;
+  /** customer / position / trx attributes: value from a service's GET attribute */
+  service?: { serviceId: string; attrId: string } | null;
 };
+
+/** When a service attribute value was last fetched (attribute id → …). */
+/** `mock`: the value is a random value of a «Mock» service */
+export type ServiceFetchedView = Record<string, { at: string; error: string | null; mock: boolean }>;
 
 export type CustomerProduct = {
   id: string;
@@ -57,6 +64,7 @@ export type PositionTransaction = {
   positionId: string;
   /** trx attribute id → value (string | number | boolean) */
   values: Record<string, string | number | boolean>;
+  serviceFetched?: ServiceFetchedView;
   sort: number;
   updatedAt: string;
 };
@@ -70,6 +78,7 @@ export type CustomerPosition = {
   productServiceType: string;
   /** attribute id → value (string | number | boolean) */
   values: Record<string, string | number | boolean>;
+  serviceFetched?: ServiceFetchedView;
   sort: number;
   updatedAt: string;
 };
@@ -83,6 +92,20 @@ export type CustomerComPref = {
 };
 
 /** E-mail settings for Admin – the password itself never leaves the server. */
+/** Admin → Anmeldung */
+export type AuthSettingsView = {
+  mode: "nexusIdentity" | "local";
+  allowRegistration: boolean;
+  /** admin = saved in Admin, env = AUTH_MODE / default */
+  source: "admin" | "env";
+  /** NEXUS_CLIENT_ID + NEXUS_CLIENT_SECRET set */
+  oidcConfigured: boolean;
+  updatedAt: string | null;
+};
+
+/** A row of Admin → Benutzer */
+export type UserRow = Me & { lastLoginAt: string; hasPassword: boolean; nexusIdentity: boolean };
+
 export type MailSettingsView = {
   /** admin = saved in Admin, env = from .env / hosting, none = not configured (dev: console) */
   source: "admin" | "env" | "none";
@@ -121,6 +144,8 @@ export type ServiceView = {
   serviceType: string;
   /** http(s) address or "" */
   url: string;
+  /** «Mock»: random values instead of calling the service */
+  mock: boolean;
   updatedAt: string;
   /** number of PUT / GET attributes */
   attributeCounts: { put: number; get: number };
@@ -141,6 +166,19 @@ export type CustomerJourneyView = {
   startedAt: string;
   completedAt: string | null;
   progress: { done: number; skipped: number; total: number };
+  /** steps with dataStatus «error» */
+  dataErrors: number;
+};
+
+export type DataStatus = "unchecked" | "ok" | "error";
+
+export type CustomerFeedbackView = {
+  id: string;
+  feedback: string;
+  feedbackComment: string;
+  feedbackRating: number | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type CustomerJourneyStepView = {
@@ -155,6 +193,10 @@ export type CustomerJourneyStepView = {
   unfilled: string[];
   doneAt: string | null;
   note: string;
+  dataStatus: DataStatus;
+  dataProblems: string[];
+  dataCheckedAt: string | null;
+  feedbacks: CustomerFeedbackView[];
 };
 
 export type ActionView = {

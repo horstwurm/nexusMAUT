@@ -26,7 +26,13 @@ function env(name: string) {
 
 export const issuerUrl = () => (process.env.NEXUS_ISSUER?.trim() || "http://localhost:3005").replace(/\/$/, "");
 export const redirectUri = () => `${appUrl()}/auth/callback`;
-export const postLogoutRedirectUri = () => `${appUrl()}/`;
+/**
+ * Where nexusIdentity sends the browser after the single sign-out – compared
+ * there **exactly** with the app's registered post-logout URIs. Default APP_URL
+ * as is (no trailing slash: «http://localhost:3006»); NEXUS_POST_LOGOUT_URI
+ * overrides it when the registration differs.
+ */
+export const postLogoutRedirectUri = () => process.env.NEXUS_POST_LOGOUT_URI?.trim() || appUrl();
 
 const g = globalThis as unknown as {
   __nexusMautOidc?: Promise<{ meta: Discovery; jwks: ReturnType<typeof createRemoteJWKSet> }>;

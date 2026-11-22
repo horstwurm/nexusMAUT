@@ -1,8 +1,24 @@
 import { redirect } from "next/navigation";
-import { requirePageUser } from "@/lib/server/auth";
+import { connection } from "next/server";
+import { AppHome } from "@/components/home/AppHome";
+import { Landing } from "@/components/home/Landing";
+import { TopBar } from "@/components/TopBar";
+import { currentUser, toMe } from "@/lib/server/auth";
+import { authMode } from "@/lib/server/authSettings";
+import { homeStats, today } from "@/lib/server/home";
 
-// The start page is the customer list (the former «Übersicht» was removed).
+// Logged out: the public homepage. Logged in: the start page (greeting, «Heute», tiles).
 export default async function HomePage() {
-  await requirePageUser("/");
-  redirect("/customers");
+  await connection();
+  const user = await currentUser();
+  if (!user) return <Landing stats={await homeStats()} authMode={await authMode()} />;
+  if (user.role === "pending") redirect("/pending");
+  return (
+    <>
+      <TopBar me={toMe(user)} active="home" />
+      <main className="page">
+        <AppHome me={toMe(user)} today={await today()} />
+      </main>
+    </>
+  );
 }

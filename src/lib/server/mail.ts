@@ -3,7 +3,7 @@ import nodemailer, { type Transporter } from "nodemailer";
 import { decrypt } from "./crypto";
 import { collections } from "./db";
 
-// E-mail via SMTP (Nodemailer) – currently the Admin test mail. The settings come from Admin → E-Mail
+// E-mail via SMTP (Nodemailer) – the Admin test mail and password reset links. The settings come from Admin → E-Mail
 // (`settings` doc "mail", password encrypted) or, when none are saved there,
 // from the environment – production uses Brevo (smtp-relay.brevo.com:587):
 //   NODE_MAILER_HOST, NODE_MAILER_PORT (587 = STARTTLS, 465 = TLS),
@@ -78,6 +78,21 @@ function transportFor(c: MailConfig) {
     };
   }
   return cached.transport;
+}
+
+/**
+ * Sends a plain-text mail (e.g. the password reset link). Without SMTP,
+ * development prints it to the console; production throws.
+ */
+export async function sendMail(to: string, subject: string, text: string): Promise<"smtp" | "console"> {
+  const c = await mailConfig();
+  if (!isConfigured(c)) {
+    if (process.env.NODE_ENV === "production") throw new Error("SMTP ist nicht konfiguriert");
+    console.log(`\n[mail] to ${to}: ${subject}\n${text}\n`);
+    return "console";
+  }
+  await transportFor(c).sendMail({ from: c.from, ...(c.replyTo && { replyTo: c.replyTo }), to, subject, text });
+  return "smtp";
 }
 
 /**

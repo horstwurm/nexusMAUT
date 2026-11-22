@@ -1,10 +1,10 @@
 import "server-only";
 import { ObjectId } from "mongodb";
-import type { CustomerJourneyStepView, CustomerJourneyView } from "@/lib/types";
-import { collections, type CustomerJourneyDoc, type CustomerJourneyStepDoc } from "./db";
+import type { CustomerFeedbackView, CustomerJourneyStepView, CustomerJourneyView } from "@/lib/types";
+import { collections, type CustomerFeedbackDoc, type CustomerJourneyDoc, type CustomerJourneyStepDoc } from "./db";
 import { HttpError } from "./http";
 import { loadRuleDataset, matchingCustomers } from "./rules";
-import { previewStep } from "./stepPreview";
+import { previewStep, type ServiceCache, type StepPreview } from "./stepPreview";
 
 // KundenJourneys: journeys assigned to customers and their progress per step.
 // Assigning copies the template steps; marking a step done renders its
@@ -24,7 +24,7 @@ export async function toCustomerJourneyViews(list: CustomerJourneyDoc[]): Promis
   const [cs, js, steps] = await Promise.all([
     customers.find({ _id: { $in: [...new Set(list.map((x) => x.customerId))] } }, { projection: { name: 1, lastname: 1 } }).toArray(),
     journeys.find({ _id: { $in: [...new Set(list.map((x) => x.journeyId))] } }, { projection: { name: 1 } }).toArray(),
-    customerJourneySteps.find({ customerJourneyId: { $in: list.map((x) => x._id) } }, { projection: { customerJourneyId: 1, status: 1 } }).toArray(),
+    customerJourneySteps.find({ customerJourneyId: { $in: list.map((x) => x._id) } }, { projection: { customerJourneyId: 1, status: 1, dataStatus: 1 } }).toArray(),
   ]);
   const cName = new Map(cs.map((c) => [c._id.toHexString(), `${c.name} ${c.lastname}`]));
   const jName = new Map(js.map((j) => [j._id.toHexString(), j.name]));
@@ -39,11 +39,22 @@ export async function toCustomerJourneyViews(list: CustomerJourneyDoc[]): Promis
     startedAt: x.startedAt.toISOString(),
     completedAt: x.completedAt?.toISOString() ?? null,
     progress: progressOf(steps.filter((s) => s.customerJourneyId.equals(x._id))),
+    dataErrors: steps.filter((s) => s.customerJourneyId.equals(x._id) && s.dataStatus === "error").length,
   }));
 }
 
+export const toFeedbackView = (f: CustomerFeedbackDoc): CustomerFeedbackView => ({
+  id: f._id.toHexString(),
+  feedback: f.feedback,
+  feedbackComment: f.feedbackComment,
+  feedbackRating: f.feedbackRating,
+  createdAt: f.createdAt.toISOString(),
+  updatedAt: f.updatedAt.toISOString(),
+});
+
 export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<CustomerJourneyStepView[]> {
-  const { actions } = await collections();
+  const { actions, customerFeedbacks } = await collections();
+  const feedbacks = await customerFeedbacks.find({ customerJourneyStepId: { $in: list.map((s) => s._id) } }).sort({ createdAt: 1 }).toArray();
   const names = new Map(
     (await actions.find({ _id: { $in: [...new Set(list.map((s) => s.actionId))] } }, { projection: { name: 1 } }).toArray()).map((a) => [
       a._id.toHexString(),
@@ -62,6 +73,10 @@ export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<Custo
     unfilled: s.unfilled,
     doneAt: s.doneAt?.toISOString() ?? null,
     note: s.note,
+    dataStatus: s.dataStatus ?? "unchecked",
+    dataProblems: s.dataProblems ?? [],
+    dataCheckedAt: s.dataCheckedAt?.toISOString() ?? null,
+    feedbacks: feedbacks.filter((f) => f.customerJourneyStepId.equals(s._id)).map(toFeedbackView),
   }));
 }
 
@@ -130,6 +145,9 @@ export async function assignJourney(p: { journeyId: ObjectId; customerIds?: Obje
         unfilled: [],
         doneAt: null,
         note: "",
+        dataStatus: "unchecked" as const,
+        dataProblems: [],
+        dataCheckedAt: null,
         updatedAt: now,
       })),
     );
@@ -159,6 +177,8 @@ export async function setStepStatus(runId: ObjectId, stepId: ObjectId, status: C
     set.content = preview.segments.map((s) => (s.kind === "text" ? s.text : (s.value ?? s.token))).join("");
     set.unfilled = preview.segments.filter((s) => s.kind === "placeholder" && s.value === null).map((s) => (s as { token: string }).token);
     set.doneAt = now;
+    // rendering is a data check, too
+    Object.assign(set, dataResult(preview, now));
   } else {
     set.content = null;
     set.unfilled = [];
@@ -187,4 +207,65 @@ export async function updateRunStatus(runId: ObjectId) {
       throw err;
     }
   }
+}
+
+export type JourneyRunCounts = { journeyId: string; active: number; done: number; cancelled: number };
+
+/** Number of runs per journey and status (the journey list on the KundenJourneys page). */
+export async function journeyRunCounts(): Promise<JourneyRunCounts[]> {
+  const { customerJourneys } = await collections();
+  const rows = await customerJourneys
+    .aggregate<{ _id: { j: ObjectId; s: CustomerJourneyDoc["status"] }; n: number }>([{ $group: { _id: { j: "$journeyId", s: "$status" }, n: { $sum: 1 } } }])
+    .toArray();
+  const out = new Map<string, JourneyRunCounts>();
+  for (const r of rows) {
+    const id = r._id.j.toHexString();
+    const c = out.get(id) ?? { journeyId: id, active: 0, done: 0, cancelled: 0 };
+    c[r._id.s] = r.n;
+    out.set(id, c);
+  }
+  return [...out.values()];
+}
+
+/** dataStatus from a rendered step: placeholders without a value and service errors are data problems. */
+function dataResult(preview: StepPreview, at: Date): Pick<CustomerJourneyStepDoc, "dataStatus" | "dataProblems" | "dataCheckedAt"> {
+  const problems = [
+    ...preview.segments.flatMap((s) => (s.kind === "placeholder" && s.value === null ? [`${s.token}: ${s.note ?? "kein Wert"}`] : [])),
+    ...preview.services.flatMap((r) => (r.status === "error" ? [`Service «${r.name}»: ${r.message ?? "Fehler"}`] : [])),
+  ];
+  return { dataStatus: problems.length ? "error" : "ok", dataProblems: [...new Set(problems)], dataCheckedAt: at };
+}
+
+/**
+ * «Daten prüfen»: renders the open steps of the active runs (of a journey, or
+ * one run) for their customer and sets dataStatus ok / error with the problems.
+ * Each service is called once per customer. Done / skipped steps keep theirs.
+ */
+export async function checkData(p: { journeyId?: ObjectId; customerJourneyId?: ObjectId }) {
+  const c = await collections();
+  const runs = await c.customerJourneys
+    .find(p.customerJourneyId ? { _id: p.customerJourneyId } : { journeyId: p.journeyId, status: "active" }, { projection: { customerId: 1, status: 1 } })
+    .toArray();
+  if (p.customerJourneyId && !runs.length) throw new HttpError(404, "KundenJourney nicht gefunden");
+  const steps = await c.customerJourneySteps.find({ customerJourneyId: { $in: runs.map((r) => r._id) }, status: "open" }).toArray();
+  const customerOf = new Map(runs.map((r) => [r._id.toHexString(), r.customerId]));
+  const cache: ServiceCache = new Map();
+  const now = new Date();
+  let ok = 0;
+  let errors = 0;
+  let failed = 0;
+  for (const step of steps) {
+    let set: Partial<CustomerJourneyStepDoc>;
+    try {
+      set = dataResult(await previewStep(step.template, customerOf.get(step.customerJourneyId.toHexString())!, cache), now);
+    } catch (err) {
+      // e.g. the customer is gone
+      set = { dataStatus: "error", dataProblems: [err instanceof Error ? err.message : "Prüfung fehlgeschlagen"], dataCheckedAt: now };
+      failed++;
+    }
+    if (set.dataStatus === "ok") ok++;
+    else errors++;
+    await c.customerJourneySteps.updateOne({ _id: step._id }, { $set: set });
+  }
+  return { runs: runs.length, steps: steps.length, ok, errors, failed };
 }

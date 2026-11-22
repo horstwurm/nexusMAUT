@@ -3,7 +3,8 @@ import { kindFromPath } from "@/lib/typeAttributes";
 import { requireUser } from "@/lib/server/auth";
 import { attributeCollection, requireProductType, toTypeAttribute, typeAttributesOf } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
-import { typeAttributeInput } from "@/lib/server/schemas";
+import { sourcedAttributeInput } from "@/lib/server/schemas";
+import { resolveAttributeSource } from "@/lib/server/serviceSources";
 
 // Attributes of a product/service type – KIND = position-attributes
 // (productServiceTypePositionAttributes) or trx-attributes
@@ -29,7 +30,7 @@ export const GET = route(async (_req: Request, ctx: Ctx) => {
 export const POST = route(async (req: Request, ctx: Ctx) => {
   await requireUser("admin");
   const { kind, type } = await target(ctx);
-  const input = await readJson(req, typeAttributeInput);
+  const input = await resolveAttributeSource(await readJson(req, sourcedAttributeInput));
   const col = await attributeCollection(kind);
   const last = await col.find({ typeId: type._id }).sort({ sort: -1 }).limit(1).next();
   const now = new Date();

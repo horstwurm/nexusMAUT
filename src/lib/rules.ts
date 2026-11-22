@@ -106,6 +106,8 @@ export type TrxCondition = {
   value: number;
 };
 
+// Service values are «Service» attributes (customer / position / trx) with
+// stored values – compared like any attribute (service conditions until 2026-11).
 export type Condition = CustomerCondition | PositionCondition | TrxCondition;
 export type Rule = { match: "all" | "any"; conditions: Condition[] };
 

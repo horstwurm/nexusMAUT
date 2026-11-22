@@ -4,6 +4,7 @@ import { parseCustomerAttributes, toCustomer } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { customerInput } from "@/lib/server/schemas";
+import { refreshCustomer } from "@/lib/server/serviceAttributes";
 
 // GET    /api/customers/ID – one customer
 // PATCH  /api/customers/ID – change { name, lastname, dateOfBirth, attributes? } (attributes omitted = kept)
@@ -38,13 +39,14 @@ export const PATCH = route(async (req: Request, ctx: Ctx) => {
     { returnDocument: "after" },
   );
   if (!doc) throw new HttpError(404, "Nicht gefunden");
-  return Response.json(toCustomer(doc), { headers: NO_STORE });
+  await refreshCustomer(id); // «Service» customer attributes (the PUT values may have changed)
+  return Response.json(toCustomer((await customers.findOne({ _id: id }))!), { headers: NO_STORE });
 });
 
 export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   await requireUser();
   const id = parseId((await ctx.params).id);
-  const { customers, customerProducts, customerComPrefs, customerPositions, positionTransactions, customerJourneys, customerJourneySteps } = await collections();
+  const { customers, customerProducts, customerComPrefs, customerPositions, positionTransactions, customerJourneys, customerJourneySteps, customerFeedbacks } = await collections();
   const res = await customers.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
   // relations go with the customer
@@ -55,6 +57,7 @@ export const DELETE = route(async (_req: Request, ctx: Ctx) => {
     positionTransactions.deleteMany({ customerId: id }),
     customerJourneys.deleteMany({ customerId: id }),
     customerJourneySteps.deleteMany({ customerId: id }),
+    customerFeedbacks.deleteMany({ customerId: id }),
   ]);
   return new Response(null, { status: 204 });
 });

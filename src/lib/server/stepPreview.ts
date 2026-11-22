@@ -36,7 +36,11 @@ const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const findDef = (defs: AttributeDef[], name: string) => defs.find((d) => eq(d.attribute, name));
 const fmt = (def: AttributeDef, v: PositionValue | undefined) => (v === undefined || v === "" ? null : formatValue(def, v));
 
-export async function previewStep(content: string, customerId: ObjectId): Promise<StepPreview> {
+type ServiceResult = { mapped: MappedValue[]; sample: boolean; error?: string };
+/** Service results by "customerId:service" – lets a data check call each service once per customer. */
+export type ServiceCache = Map<string, { result: ServiceResult; run: ServiceRun }>;
+
+export async function previewStep(content: string, customerId: ObjectId, cache?: ServiceCache): Promise<StepPreview> {
   const c = await collections();
   const customer = await c.customers.findOne({ _id: customerId });
   if (!customer) throw new HttpError(404, "Kunde nicht gefunden");
@@ -68,9 +72,15 @@ export async function previewStep(content: string, customerId: ObjectId): Promis
   // --- services used in the content: call each once ----------------------------------
   const serviceNames = new Set<string>();
   for (const id of usedGroups(content, catalog)) if (id.startsWith("service:")) serviceNames.add(id.slice("service:".length));
-  const serviceValues = new Map<string, { mapped: MappedValue[]; sample: boolean; error?: string }>();
+  const serviceValues = new Map<string, ServiceResult>();
   const runs: ServiceRun[] = [];
   for (const name of serviceNames) {
+    const cached = cache?.get(`${customerId.toHexString()}:${name.toLowerCase()}`);
+    if (cached) {
+      serviceValues.set(name, cached.result);
+      runs.push(cached.run);
+      continue;
+    }
     const service = await c.services.findOne({ name }, { collation: { locale: "de", strength: 2 } });
     if (!service) continue;
     const [putDefs, getDefs] = await Promise.all([serviceAttributeDefs(service._id, "put"), serviceAttributeDefs(service._id, "get")]);
@@ -83,13 +93,17 @@ export async function previewStep(content: string, customerId: ObjectId): Promis
     const parsed = parseAttributeValues(putDefs, input);
     const values = "values" in parsed ? parsed.values : {};
     const sent = Object.fromEntries(putDefs.filter((d) => values[d.id] !== undefined).map((d) => [d.attribute, values[d.id]]));
-    if (!service.url) {
+    if (!service.url && !service.mock) {
       serviceValues.set(name, { mapped: mapResponse(getDefs, mockResponse(getDefs)).values, sample: true });
       runs.push({ name, status: "sample", message: "keine URL erfasst – Beispieldaten", sent });
       continue;
     }
-    const r = await callService(service.url, "POST", putDefs, getDefs, values);
-    if (r.mapped && !r.mock) {
+    const r = await callService(service.url ?? "", "POST", putDefs, getDefs, values, { mock: service.mock });
+    if (r.random && r.mapped) {
+      // «Mock» service: random values, marked like sample data
+      serviceValues.set(name, { mapped: r.mapped, sample: true });
+      runs.push({ name, status: "sample", message: "Mock – Zufallswerte, Service nicht aufgerufen", sent });
+    } else if (r.mapped && !r.mock) {
       serviceValues.set(name, { mapped: r.mapped, sample: false });
       runs.push({ name, status: r.error ? "error" : "ok", ...(r.error && { message: r.error }), sent });
     } else if (r.mock) {
@@ -98,6 +112,13 @@ export async function previewStep(content: string, customerId: ObjectId): Promis
     } else {
       serviceValues.set(name, { mapped: [], sample: false, error: r.error ?? "Fehler" });
       runs.push({ name, status: "error", message: r.error ?? `HTTP ${r.response?.status}`, sent });
+    }
+  }
+
+  if (cache) {
+    for (const r of runs) {
+      const result = serviceValues.get(r.name);
+      if (result) cache.set(`${customerId.toHexString()}:${r.name.toLowerCase()}`, { result, run: r });
     }
   }
 

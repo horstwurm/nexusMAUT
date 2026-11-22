@@ -1,3 +1,4 @@
+import { serviceSourceUsage } from "@/lib/server/serviceSources";
 import { requireUser } from "@/lib/server/auth";
 import { collections } from "@/lib/server/db";
 import { assertDomainValue } from "@/lib/server/domains";
@@ -33,6 +34,8 @@ export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   await requireUser("admin");
   const id = parseId((await ctx.params).id);
   const { services, servicePutAttributes, serviceGetAttributes } = await collections();
+  const used = await serviceSourceUsage({ serviceId: id });
+  if (used.length) throw new HttpError(409, `Der Service liefert Werte für ${used.join(", ")} – zuerst dort ändern`);
   const res = await services.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
   await Promise.all([servicePutAttributes.deleteMany({ serviceId: id }), serviceGetAttributes.deleteMany({ serviceId: id })]);

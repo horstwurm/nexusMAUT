@@ -5,7 +5,16 @@
 
 import type { AttributeType } from "./typeAttributes";
 
-export type AttributeDef = { id: string; attribute: string; attributeType: AttributeType; options: string[] };
+/** A «Service» attribute's source (names for display). */
+export type AttributeServiceSource = { serviceId: string; attrId: string; serviceName: string; attrName: string };
+export type AttributeDef = {
+  id: string;
+  attribute: string;
+  attributeType: AttributeType;
+  options: string[];
+  /** value fetched from a service – read-only in forms */
+  service?: AttributeServiceSource | null;
+};
 export type PositionValue = string | number | boolean;
 export type PositionValues = Record<string, PositionValue>;
 

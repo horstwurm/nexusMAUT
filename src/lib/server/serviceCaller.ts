@@ -1,6 +1,6 @@
 import "server-only";
 import type { PositionValue } from "@/lib/positions";
-import { buildRequest, isUnavailable, mapResponse, mockResponse, type CallMethod, type MappedValue, type ServiceAttrDef } from "@/lib/serviceCall";
+import { buildRequest, isUnavailable, mapResponse, mockResponse, randomResponse, type CallMethod, type MappedValue, type ServiceAttrDef } from "@/lib/serviceCall";
 import type { AttributeDef } from "@/lib/positions";
 
 // Calls a service over HTTP (server side: no CORS, the URL stays here):
@@ -19,6 +19,8 @@ export type CallResult = {
   error: string | null;
   mapped: MappedValue[] | null;
   mock?: { response: Record<string, unknown>; mapped: MappedValue[] };
+  /** «Mock» service: not called, the answer holds random values */
+  random?: boolean;
 };
 
 export async function callService(
@@ -27,7 +29,20 @@ export async function callService(
   putDefs: AttributeDef[],
   getDefs: ServiceAttrDef[],
   values: Record<string, PositionValue>,
+  opts: { mock?: boolean } = {},
 ): Promise<CallResult> {
+  if (opts.mock) {
+    // «Mock» switched on: no HTTP call, a random answer mapped like a real one
+    const json = randomResponse(getDefs);
+    const raw = JSON.stringify(json, null, 2);
+    return {
+      request: buildRequest(url || "https://mock.invalid/", method, putDefs, values),
+      response: { status: 200, ok: true, durationMs: 0, contentType: "application/json", raw, truncated: false },
+      error: null,
+      mapped: mapResponse(getDefs, json).values,
+      random: true,
+    };
+  }
   const request = buildRequest(url, method, putDefs, values);
   /** expected answer with sample values, mapped like a real one */
   const sample = () => {

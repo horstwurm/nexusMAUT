@@ -2,15 +2,17 @@ import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { Me } from "@/lib/types";
+import { randomUUID } from "node:crypto";
 import { newToken, sha256 } from "./crypto";
 import { collections, type Role, type UserDoc } from "./db";
 import { HttpError } from "./http";
 import type { IdClaims } from "./oidc";
 
-// Our own session after the OIDC login at nexusIdentity: httpOnly cookie
-// `sid`, only its sha256 stored. Access is decided here (roles), not at
-// nexusIdentity: the very first user becomes admin, later ones wait as
-// "pending" until an admin gives them a role.
+// Our own session after the login – at nexusIdentity (OIDC) or with the own
+// login (e-mail + password, Admin → Anmeldung): httpOnly cookie `sid`, only
+// its sha256 stored. Access is decided here (roles), not at nexusIdentity: the
+// very first user becomes admin, later ones wait as "pending" until an admin
+// gives them a role.
 
 const SESSION_COOKIE = "sid";
 export const STATE_COOKIE = "oidc_state";
@@ -28,31 +30,74 @@ export function toMe(doc: UserDoc): Me {
   return { id: doc._id, email: doc.email, name: doc.name, role: doc.role };
 }
 
-/** Creates or updates the local user from the ID token claims. */
+/** The first user to log in sets the app up. */
+async function promoteFirstUser(user: UserDoc) {
+  const { users } = await collections();
+  if (user.role === "pending" && (await users.countDocuments({ role: "admin" })) === 0) {
+    await users.updateOne({ _id: user._id }, { $set: { role: "admin" } });
+    user.role = "admin";
+  }
+  return user;
+}
+
+/**
+ * Creates or updates the user from the ID token claims. A user registered here
+ * (own login) with the same, verified e-mail is linked (`oidcSub`) instead of
+ * getting a second account.
+ */
 export async function upsertUser(claims: IdClaims) {
   const { users } = await collections();
   const now = new Date();
   const email = (claims.email ?? "").toLowerCase();
   const name = claims.name?.trim() || email;
-  const user = await users.findOneAndUpdate(
-    { _id: claims.sub },
-    { $set: { email, name, lastLoginAt: now }, $setOnInsert: { role: "pending" as Role, createdAt: now } },
-    { upsert: true, returnDocument: "after" },
-  );
-  if (user!.role === "pending" && (await users.countDocuments({ role: "admin" })) === 0) {
-    // the first user to log in sets the app up
-    await users.updateOne({ _id: user!._id }, { $set: { role: "admin" } });
-    user!.role = "admin";
+  const linked =
+    (await users.findOne({ $or: [{ _id: claims.sub }, { oidcSub: claims.sub }] })) ??
+    (claims.email_verified === true && email ? await users.findOne({ email, _id: /^local_/, oidcSub: { $exists: false } }) : null);
+  if (linked) {
+    const user = await users.findOneAndUpdate(
+      { _id: linked._id },
+      { $set: { email, name, lastLoginAt: now, ...(linked._id !== claims.sub && { oidcSub: claims.sub }) } },
+      { returnDocument: "after" },
+    );
+    return promoteFirstUser(user!);
   }
-  return user!;
+  const user: UserDoc = { _id: claims.sub, email, name, role: "pending", createdAt: now, lastLoginAt: now };
+  await users.insertOne(user);
+  return promoteFirstUser(user);
 }
 
-export async function startSession(userId: string, idToken: string) {
+/** Own login: a new account (waits for a role – unless it is the very first user). */
+export async function createLocalUser(p: { email: string; name: string; passwordHash: string }) {
+  const { users } = await collections();
+  if (await users.findOne({ email: p.email })) throw new HttpError(409, "Diese E-Mail-Adresse ist bereits registriert");
+  const now = new Date();
+  const user: UserDoc = {
+    _id: `local_${randomUUID()}`,
+    email: p.email,
+    name: p.name,
+    role: "pending",
+    passwordHash: p.passwordHash,
+    passwordChangedAt: now,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+  await users.insertOne(user);
+  return promoteFirstUser(user);
+}
+
+export async function startSession(userId: string, idToken?: string) {
   const token = newToken();
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
   const { sessions } = await collections();
-  await sessions.insertOne({ _id: sha256(token), userId, idToken, expiresAt });
+  await sessions.insertOne({ _id: sha256(token), userId, ...(idToken && { idToken }), expiresAt });
   (await cookies()).set(SESSION_COOKIE, token, cookieOptions(expiresAt));
+}
+
+/** Logs the user out everywhere except in this browser (after a password change). */
+export async function endOtherSessions(userId: string) {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const { sessions } = await collections();
+  await sessions.deleteMany({ userId, ...(token && { _id: { $ne: sha256(token) } }) });
 }
 
 /** Ends the local session; returns its ID token for the single sign-out. */
@@ -78,6 +123,13 @@ export async function currentUser() {
 }
 
 const RANK: Record<Role, number> = { pending: 0, editor: 1, admin: 2 };
+
+/** For API routes: any logged-in user, also one waiting for a role («Mein Konto»). */
+export async function requireSignedIn() {
+  const user = await currentUser();
+  if (!user) throw new HttpError(401, "Nicht angemeldet");
+  return user;
+}
 
 /** For API routes: 401 without login, 403 below the role. */
 export async function requireUser(min: Exclude<Role, "pending"> = "editor") {

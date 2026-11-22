@@ -32,7 +32,7 @@ export function CustomerAttributesAdmin({ initial }: { initial: TypeAttribute[] 
         <div className="tags">
           {list.map((a) => (
             <span key={a.id} className="badge" title={a.options.join(", ") || undefined}>
-              {a.attribute} · {ATTRIBUTE_TYPES[a.attributeType]}
+              {a.attribute} · {a.service ? "Service" : ATTRIBUTE_TYPES[a.attributeType]}
             </span>
           ))}
         </div>
@@ -44,6 +44,8 @@ export function CustomerAttributesAdmin({ initial }: { initial: TypeAttribute[] 
           hint="Gelten für alle Kunden. Wird ein Attribut gelöscht, verschwinden seine Werte bei allen Kunden."
           newLabel="Neues Kundenattribut"
           fallbackCount={list.length}
+          allowService
+          refreshKind="customer"
           onClose={async () => {
             setOpen(false);
             setList(await api<TypeAttribute[]>("/api/customer-attributes"));

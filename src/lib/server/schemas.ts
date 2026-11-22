@@ -45,13 +45,32 @@ export const customerComPrefInput = z.object({
   comPrefType: z.string().trim().min(1, "Art fehlt").max(40),
 });
 
-export const typeAttributeInput = z
+const attributeFields = {
+  attribute: z.string().trim().min(1, "Attribut fehlt").max(100),
+  attributeType: z.enum(ATTRIBUTE_TYPE_NAMES as [AttributeType, ...AttributeType[]], { message: "Unbekannter Attributtyp" }),
+  options: z.array(z.string().max(100)).max(500).default([]).transform(normalizeOptions),
+};
+
+export const typeAttributeInput = z.object(attributeFields).superRefine((v, ctx) => {
+  const problem = attributeDefinitionError(v.attributeType, v.options);
+  if (problem) ctx.addIssue({ code: "custom", message: problem, path: ["options"] });
+});
+
+/**
+ * Customer / position / trx attributes: like a type attribute, or a «Service»
+ * attribute (`service` set) – then type and options come from the service's
+ * GET attribute (resolved by the route, see serviceAttributes.ts).
+ */
+export const sourcedAttributeInput = z
   .object({
-    attribute: z.string().trim().min(1, "Attribut fehlt").max(100),
-    attributeType: z.enum(ATTRIBUTE_TYPE_NAMES as [AttributeType, ...AttributeType[]], { message: "Unbekannter Attributtyp" }),
-    options: z.array(z.string().max(100)).max(500).default([]).transform(normalizeOptions),
+    ...attributeFields,
+    service: z
+      .object({ serviceId: z.string().regex(/^[0-9a-f]{24}$/, "Service wählen"), attrId: z.string().regex(/^[0-9a-f]{24}$/, "GET-Attribut wählen") })
+      .nullable()
+      .default(null),
   })
   .superRefine((v, ctx) => {
+    if (v.service) return;
     const problem = attributeDefinitionError(v.attributeType, v.options);
     if (problem) ctx.addIssue({ code: "custom", message: problem, path: ["options"] });
   });
@@ -173,6 +192,8 @@ export const serviceInput = z.object({
   name: z.string().trim().min(1, "Name fehlt").max(120),
   serviceType: z.string().trim().min(1, "Servicetyp fehlt").max(40),
   url: optionalUrl,
+  /** «Mock»: random values instead of calling the service */
+  mock: z.boolean().default(false),
 });
 
 /** A GET attribute of a service: like a type attribute, or a list (table) with columns. */
@@ -225,4 +246,48 @@ export const customerJourneyPatch = z.object({ status: z.enum(["active", "cancel
 export const customerJourneyStepPatch = z.object({
   status: z.enum(["open", "done", "skipped"]),
   note: z.string().trim().max(2000).optional(),
+});
+
+/** «Daten prüfen»: the active runs of a journey, or one run. */
+export const dataCheckInput = z
+  .object({ journeyId: hexId.optional(), customerJourneyId: hexId.optional() })
+  .refine((v) => !!v.journeyId !== !!v.customerJourneyId, { message: "Journey oder KundenJourney angeben" });
+
+/** A customer's feedback on a KundenJourney step (relation customerFeedback). */
+export const customerFeedbackInput = z.object({
+  feedback: z.string().trim().min(1, "Feedback fehlt").max(200),
+  feedbackComment: z.string().trim().max(2000).default(""),
+  feedbackRating: z.number().int().min(1, "Bewertung 1 – 5").max(5, "Bewertung 1 – 5").nullable().default(null),
+});
+
+// --- own login (Admin → Anmeldung «Eigene Anmeldung») ----------------------------
+
+const newPassword = z
+  .string()
+  .min(8, "Das Passwort braucht mindestens 8 Zeichen")
+  .max(200, "Das Passwort ist zu lang (max. 200 Zeichen)");
+
+export const loginInput = z.object({
+  email: z.string().trim().toLowerCase().max(254),
+  password: z.string().max(200),
+});
+
+export const registerInput = z.object({
+  name: z.string().trim().min(1, "Name fehlt").max(100),
+  email,
+  password: newPassword,
+});
+
+export const forgotPasswordInput = z.object({ email: z.string().trim().toLowerCase().max(254) });
+
+export const resetPasswordInput = z.object({ token: z.string().min(1).max(200), password: newPassword });
+
+/** «Mein Konto»: `currentPassword` only needed when a password is already set */
+export const changePasswordInput = z.object({ currentPassword: z.string().max(200).optional(), newPassword });
+
+export const profileInput = z.object({ name: z.string().trim().min(1, "Name fehlt").max(100) });
+
+export const authSettingsInput = z.object({
+  mode: z.enum(["nexusIdentity", "local"]),
+  allowRegistration: z.boolean(),
 });

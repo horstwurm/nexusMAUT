@@ -5,6 +5,7 @@ import { parseCustomerAttributes, toCustomer } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { NO_STORE, readJson, route } from "@/lib/server/http";
 import { customerInput } from "@/lib/server/schemas";
+import { refreshCustomer } from "@/lib/server/serviceAttributes";
 
 // GET  /api/customers?q=&limit= – list, sorted by last name, with positionCount
 // POST /api/customers           – create { name, lastname, dateOfBirth: "YYYY-MM-DD", attributes?: { ATTR_ID: value } }
@@ -48,5 +49,6 @@ export const POST = route(async (req: Request) => {
   };
   const { customers } = await collections();
   await customers.insertOne(doc);
-  return Response.json(toCustomer(doc), { status: 201, headers: NO_STORE });
+  await refreshCustomer(doc._id); // «Service» customer attributes
+  return Response.json(toCustomer((await customers.findOne({ _id: doc._id }))!), { status: 201, headers: NO_STORE });
 });

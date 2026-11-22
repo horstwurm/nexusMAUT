@@ -3,9 +3,10 @@ import { requireUser } from "@/lib/server/auth";
 import { collections } from "@/lib/server/db";
 import { toTypeAttribute } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
-import { typeAttributeInput } from "@/lib/server/schemas";
+import { sourcedAttributeInput } from "@/lib/server/schemas";
+import { resolveAttributeSource } from "@/lib/server/serviceSources";
 
-// PUT    /api/customer-attributes/ID { attribute, attributeType, options? } – replace (admins)
+// PUT    /api/customer-attributes/ID { attribute, attributeType, options?, service? } – replace (admins)
 // PATCH  /api/customer-attributes/ID { sort } – reorder (admins)
 // DELETE /api/customer-attributes/ID – its values leave all customers (admins)
 
@@ -13,7 +14,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export const PUT = route(async (req: Request, ctx: Ctx) => {
   await requireUser("admin");
-  const input = await readJson(req, typeAttributeInput);
+  const input = await resolveAttributeSource(await readJson(req, sourcedAttributeInput));
   const { customerAttributes } = await collections();
   let doc;
   try {
@@ -50,6 +51,7 @@ export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   const res = await customerAttributes.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
   const key = `attributes.${id.toHexString()}`;
-  await customers.updateMany({ [key]: { $exists: true } }, { $unset: { [key]: "" } });
+  const meta = `serviceFetched.${id.toHexString()}`;
+  await customers.updateMany({ $or: [{ [key]: { $exists: true } }, { [meta]: { $exists: true } }] }, { $unset: { [key]: "", [meta]: "" } });
   return new Response(null, { status: 204 });
 });

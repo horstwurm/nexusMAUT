@@ -6,7 +6,7 @@ import { customerJourneyPatch } from "@/lib/server/schemas";
 
 // GET    /api/customer-journeys/ID – the run with its steps (editors)
 // PATCH  /api/customer-journeys/ID { status: "cancelled" | "active" } – cancel / reactivate (editors)
-// DELETE /api/customer-journeys/ID – with its steps (editors)
+// DELETE /api/customer-journeys/ID – with its steps and their feedbacks (editors)
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -47,9 +47,9 @@ export const PATCH = route(async (req: Request, ctx: Ctx) => {
 export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   await requireUser();
   const id = parseId((await ctx.params).id);
-  const { customerJourneys, customerJourneySteps } = await collections();
+  const { customerJourneys, customerJourneySteps, customerFeedbacks } = await collections();
   const res = await customerJourneys.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
-  await customerJourneySteps.deleteMany({ customerJourneyId: id });
+  await Promise.all([customerJourneySteps.deleteMany({ customerJourneyId: id }), customerFeedbacks.deleteMany({ customerJourneyId: id })]);
   return new Response(null, { status: 204 });
 });

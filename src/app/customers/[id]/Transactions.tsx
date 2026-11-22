@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText } from "@/lib/client";
-import { formatValue, type AttributeDef } from "@/lib/positions";
-import type { PositionTransaction } from "@/lib/types";
-import { AttributeFields, formValues, type FormValue } from "./AttributeFields";
+import type { AttributeDef } from "@/lib/positions";
+import type { PositionTransaction, ServiceFetchedView } from "@/lib/types";
+import { AttrCell, AttrHeader, AttributeFields, formValues, type FormValue } from "./AttributeFields";
 
 /**
  * Transactions of one position (accordion content): a table with a column
@@ -99,9 +99,7 @@ export function Transactions({
               <tr>
                 <th className="num">#</th>
                 {defs.map((d) => (
-                  <th key={d.id} className={d.attributeType === "num" ? "num" : ""}>
-                    {d.attribute}
-                  </th>
+                  <AttrHeader key={d.id} def={d} />
                 ))}
                 <th />
               </tr>
@@ -111,9 +109,7 @@ export function Transactions({
                 <tr key={t.id}>
                   <td className="num muted">{i + 1}</td>
                   {defs.map((d) => (
-                    <td key={d.id} className={d.attributeType === "num" ? "num" : ""}>
-                      {formatValue(d, t.values[d.id])}
-                    </td>
+                    <AttrCell key={d.id} def={d} value={t.values[d.id]} fetched={t.serviceFetched} />
                   ))}
                   <td>
                     <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: 4 }}>
@@ -149,6 +145,7 @@ export function Transactions({
           title={editing === "new" ? "Neue Transaktion" : "Transaktion bearbeiten"}
           defs={defs}
           initial={formValues(defs, editing === "new" ? {} : editing.values)}
+          fetched={editing === "new" ? undefined : editing.serviceFetched}
           onClose={() => setEditing(null)}
           onSave={async (values) => {
             await api(editing === "new" ? url : `${url}/${editing.id}`, { method: editing === "new" ? "POST" : "PUT", body: { values } });
@@ -166,12 +163,14 @@ function TransactionModal({
   title,
   defs,
   initial,
+  fetched,
   onClose,
   onSave,
 }: {
   title: string;
   defs: AttributeDef[];
   initial: Record<string, FormValue>;
+  fetched?: ServiceFetchedView;
   onClose: () => void;
   onSave: (values: Record<string, FormValue>) => Promise<void>;
 }) {
@@ -197,7 +196,7 @@ function TransactionModal({
       >
         <h2>{title}</h2>
         <Notice kind="error">{error}</Notice>
-        <AttributeFields defs={defs} values={values} onChange={setValues} />
+        <AttributeFields defs={defs} values={values} onChange={setValues} fetched={fetched} />
         <p className="small muted">Leere Felder bleiben leer; mindestens ein Wert ist nötig.</p>
         <div className="actions">
           <button type="button" className="btn" onClick={onClose}>

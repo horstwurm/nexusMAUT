@@ -7,7 +7,7 @@ import { formatDay } from "@/lib/customers";
 import type { Segment } from "@/lib/placeholders";
 import type { Customer, JourneyStepView } from "@/lib/types";
 
-type Preview = {
+export type Preview = {
   customer: { id: string; name: string };
   segments: Segment[];
   services: { name: string; status: "ok" | "sample" | "error"; message?: string; sent?: Record<string, unknown> }[];
@@ -58,9 +58,6 @@ export function StepTestModal({
     }
   }
 
-  const placeholders = preview?.segments.filter((s): s is Extract<Segment, { kind: "placeholder" }> => s.kind === "placeholder") ?? [];
-  const missing = placeholders.filter((p) => p.value === null);
-
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal modal-wide" style={{ maxWidth: 980 }} onClick={(e) => e.stopPropagation()}>
@@ -89,64 +86,7 @@ export function StepTestModal({
           </button>
         </div>
 
-        {preview && (
-          <>
-            <h3>
-              Ergebnis für {preview.customer.name}{" "}
-              <span className="small muted" style={{ fontWeight: 400 }}>
-                · {placeholders.length - missing.length} von {placeholders.length} Platzhaltern gefüllt
-              </span>
-            </h3>
-            <div className="step-preview">
-              {preview.segments.map((s, i) =>
-                s.kind === "text" ? (
-                  <Fragment key={i}>{s.text}</Fragment>
-                ) : s.value !== null ? (
-                  <mark key={i} className={`ph-filled${s.note ? " ph-sample" : ""}`} title={`${s.token}${s.note ? ` – ${s.note}` : ""}`}>
-                    {s.value}
-                  </mark>
-                ) : (
-                  <mark key={i} className="ph-missing" title={`${s.token} – ${s.note ?? "kein Wert"}`}>
-                    {s.token}
-                  </mark>
-                ),
-              )}
-              {!preview.segments.length && <span className="muted">(kein Inhalt)</span>}
-            </div>
-
-            {missing.length > 0 && (
-              <Notice kind="warn">
-                Ohne Wert:{" "}
-                {missing.map((m, i) => (
-                  <span key={i}>
-                    {i > 0 && ", "}
-                    <code>{m.token}</code> ({m.note ?? "kein Wert"})
-                  </span>
-                ))}
-              </Notice>
-            )}
-
-            {preview.services.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <h4 style={{ margin: "0 0 6px" }}>Aufgerufene Services</h4>
-                {preview.services.map((s) => (
-                  <div key={s.name} className="small" style={{ marginBottom: 4 }}>
-                    <span className={`badge ${s.status === "ok" ? "badge-ok" : s.status === "sample" ? "badge-warn" : "badge-danger"}`}>
-                      {s.status === "ok" ? "ok" : s.status === "sample" ? "Beispieldaten" : "Fehler"}
-                    </span>{" "}
-                    <strong>{s.name}</strong>
-                    {s.message && <span className="muted"> – {s.message}</span>}
-                    {s.sent && (
-                      <div className="muted">
-                        gesendet: <code>{JSON.stringify(s.sent)}</code>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+        {preview && <StepPreviewResult preview={preview} />}
 
         <details className="small">
           <summary>Wie werden Platzhalter gefüllt?</summary>
@@ -177,5 +117,69 @@ export function StepTestModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/** The rendered content (filled / sample / missing placeholders) and the services called. */
+export function StepPreviewResult({ preview }: { preview: Preview }) {
+  const placeholders = preview.segments.filter((s): s is Extract<Segment, { kind: "placeholder" }> => s.kind === "placeholder");
+  const missing = placeholders.filter((p) => p.value === null);
+  return (
+    <>
+        <h3>
+          Ergebnis für {preview.customer.name}{" "}
+          <span className="small muted" style={{ fontWeight: 400 }}>
+            · {placeholders.length - missing.length} von {placeholders.length} Platzhaltern gefüllt
+          </span>
+        </h3>
+        <div className="step-preview">
+          {preview.segments.map((s, i) =>
+            s.kind === "text" ? (
+              <Fragment key={i}>{s.text}</Fragment>
+            ) : s.value !== null ? (
+              <mark key={i} className={`ph-filled${s.note ? " ph-sample" : ""}`} title={`${s.token}${s.note ? ` – ${s.note}` : ""}`}>
+                {s.value}
+              </mark>
+            ) : (
+              <mark key={i} className="ph-missing" title={`${s.token} – ${s.note ?? "kein Wert"}`}>
+                {s.token}
+              </mark>
+            ),
+          )}
+          {!preview.segments.length && <span className="muted">(kein Inhalt)</span>}
+        </div>
+
+        {missing.length > 0 && (
+          <Notice kind="warn">
+            Ohne Wert:{" "}
+            {missing.map((m, i) => (
+              <span key={i}>
+                {i > 0 && ", "}
+                <code>{m.token}</code> ({m.note ?? "kein Wert"})
+              </span>
+            ))}
+          </Notice>
+        )}
+
+        {preview.services.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <h4 style={{ margin: "0 0 6px" }}>Aufgerufene Services</h4>
+            {preview.services.map((s) => (
+              <div key={s.name} className="small" style={{ marginBottom: 4 }}>
+                <span className={`badge ${s.status === "ok" ? "badge-ok" : s.status === "sample" ? "badge-warn" : "badge-danger"}`}>
+                  {s.status === "ok" ? "ok" : s.status === "sample" ? "Beispieldaten" : "Fehler"}
+                </span>{" "}
+                <strong>{s.name}</strong>
+                {s.message && <span className="muted"> – {s.message}</span>}
+                {s.sent && (
+                  <div className="muted">
+                    gesendet: <code>{JSON.stringify(s.sent)}</code>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+    </>
   );
 }

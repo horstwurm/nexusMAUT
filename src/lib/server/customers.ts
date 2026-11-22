@@ -4,9 +4,13 @@ import { dayFromDb } from "@/lib/customers";
 import { parseAttributeValues, type AttributeDef } from "@/lib/positions";
 import type { AttributeKind } from "@/lib/typeAttributes";
 import type { Customer, CustomerComPref, CustomerPosition, CustomerProduct, PositionTransaction } from "@/lib/types";
-import { collections, type CustomerComPrefDoc, type CustomerDoc, type CustomerPositionDoc, type CustomerProductDoc, type PositionTransactionDoc } from "./db";
+import { collections, type ServiceFetched, type CustomerComPrefDoc, type CustomerDoc, type CustomerPositionDoc, type CustomerProductDoc, type PositionTransactionDoc } from "./db";
 import { typeAttributesOf } from "./domains";
 import { HttpError } from "./http";
+import { toAttributeDefs } from "./serviceSources";
+
+const fetchedView = (f: ServiceFetched) =>
+  Object.fromEntries(Object.entries(f).map(([k, v]) => [k, { at: v.at.toISOString(), error: v.error, mock: v.mock ?? false }]));
 
 export const toCustomer = (c: CustomerDoc): Customer => ({
   id: c._id.toHexString(),
@@ -14,6 +18,7 @@ export const toCustomer = (c: CustomerDoc): Customer => ({
   lastname: c.lastname,
   dateOfBirth: dayFromDb(c.dateOfBirth),
   attributes: c.attributes ?? {},
+  ...(c.serviceFetched && { serviceFetched: fetchedView(c.serviceFetched) }),
   createdAt: c.createdAt.toISOString(),
   updatedAt: c.updatedAt.toISOString(),
 });
@@ -47,6 +52,7 @@ export const toCustomerPosition = (p: CustomerPositionDoc): CustomerPosition => 
   customerId: p.customerId.toHexString(),
   productServiceType: p.productServiceType,
   values: p.values,
+  ...(p.serviceFetched && { serviceFetched: fetchedView(p.serviceFetched) }),
   sort: p.sort,
   updatedAt: p.updatedAt.toISOString(),
 });
@@ -55,6 +61,7 @@ export const toPositionTransaction = (t: PositionTransactionDoc): PositionTransa
   id: t._id.toHexString(),
   positionId: t.positionId.toHexString(),
   values: t.values,
+  ...(t.serviceFetched && { serviceFetched: fetchedView(t.serviceFetched) }),
   sort: t.sort,
   updatedAt: t.updatedAt.toISOString(),
 });
@@ -90,12 +97,7 @@ export async function parseCustomerAttributes(input: Record<string, unknown>) {
 /** The customer attributes, in order. */
 export async function customerAttributeDefs(): Promise<AttributeDef[]> {
   const { customerAttributes } = await collections();
-  return (await customerAttributes.find().sort({ sort: 1, attribute: 1 }).toArray()).map((a) => ({
-    id: a._id.toHexString(),
-    attribute: a.attribute,
-    attributeType: a.attributeType,
-    options: a.options,
-  }));
+  return toAttributeDefs(await customerAttributes.find().sort({ sort: 1, attribute: 1 }).toArray());
 }
 
 /** The position (or transaction) attributes of a product type (by code); none for an unknown code. */
@@ -103,10 +105,5 @@ export async function attributeDefsOf(typeCode: string, kind: AttributeKind = "p
   const { domainValues } = await collections();
   const type = await domainValues.findOne({ domain: "productServiceType", code: typeCode });
   if (!type) return [];
-  return (await typeAttributesOf(type._id, kind)).map((a) => ({
-    id: a._id.toHexString(),
-    attribute: a.attribute,
-    attributeType: a.attributeType,
-    options: a.options,
-  }));
+  return toAttributeDefs(await typeAttributesOf(type._id, kind));
 }
