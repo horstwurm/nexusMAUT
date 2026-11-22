@@ -224,6 +224,23 @@ All pages use the full window width (`.page`, 24px side padding).
   `JourneyStepsModal` (src/app/journeys/). Steps go with the journey; an action used by a step
   can't be deleted (409). Until 2026-11 steps had `status` (value list
   `actionStatus`, removed) and `feedback` instead of `content`.
+  **Feedback options** (relation `journeyStepFeedbackOptions`, collection of
+  that name, `src/lib/feedbackOptions.ts`): the answers a customer can give to
+  a step – `option` (text, ≤ 200, unique per step, case-insensitive) +
+  `meaning` (fixed: `OK` | `WARN` | `NOK`, badges OK / Warnung / Nicht OK),
+  ordered by `sort`; `journeyId` denormalised. API
+  `/api/journeys/ID/steps/SID/feedback-options[/OID]` (GET editors; POST,
+  PUT, PATCH {sort}, DELETE admins); the step list carries `feedbackOptions`.
+  UI: column «Feedback-Optionen» in `JourneyStepsModal`, «Optionen (n)» →
+  `FeedbackOptionsModal`. Deleted with the step / journey. KundenJourney steps
+  show the options of their template step (`feedbackOptions` in
+  `toStepViews`, read live – not copied at assignment; column
+  «Feedback-Optionen» before «Feedback»). Not yet selectable when recording a
+  customer feedback. «API» in that column → `FeedbackApiModal`
+  (src/app/customer-journeys/): the POST request to
+  `…/customer-journeys/ID/steps/SID/feedbacks` for this step as HTTP and curl
+  (copy buttons, an option picked into the example body). The API needs a
+  session cookie (editors) – no API keys for other systems yet.
   Customers run through journeys as KundenJourneys (below).
   The template model was called customerJourney (collection
   `customerJourneys`) until 2026-11 and was renamed then; the name now
@@ -419,4 +436,5 @@ All pages use the full window width (`.page`, 24px side padding).
 
 List results in rules, actions linked to rules, automatic step execution
 (KundenJourney steps are marked done by hand), KundenJourneys on the
-customer detail page.
+customer detail page, choosing a feedback option when recording a customer
+feedback, API keys for other systems (the API only accepts a session cookie).

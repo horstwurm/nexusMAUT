@@ -5,6 +5,8 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
 import { StepPreviewResult, type Preview } from "@/app/journeys/StepTestModal";
 import { api, errorText, formatDate } from "@/lib/client";
+import { MeaningBadge } from "@/app/journeys/FeedbackOptionsModal";
+import { FeedbackApiModal } from "./FeedbackApiModal";
 import type { Customer, CustomerFeedbackView, CustomerJourneyStatus, CustomerJourneyStepView, CustomerJourneyView, DataStatus } from "@/lib/types";
 
 type JourneyOption = { id: string; name: string; description: string; stepCount: number };
@@ -436,6 +438,7 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState<CustomerJourneyStepView | null>(null);
+  const [apiFor, setApiFor] = useState<CustomerJourneyStepView | null>(null);
   const [feedbackFor, setFeedbackFor] = useState<{ step: CustomerJourneyStepView; feedback: CustomerFeedbackView | null } | null>(null);
 
   const reload = useCallback(async () => {
@@ -496,6 +499,7 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
               <th>Status</th>
               <th>Daten</th>
               <th>Inhalt</th>
+              <th>Feedback-Optionen</th>
               <th>Feedback</th>
               <th />
             </tr>
@@ -541,6 +545,25 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
                   ) : (
                     <span className="muted">–</span>
                   )}
+                </td>
+                <td className="small" style={{ minWidth: 160 }}>
+                  <div className="row" style={{ gap: 8, flexWrap: "nowrap", alignItems: "flex-start", justifyContent: "space-between" }}>
+                    {s.feedbackOptions.length ? (
+                      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 4 }}>
+                        {s.feedbackOptions.map((o) => (
+                          <li key={o.id} className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                            <MeaningBadge meaning={o.meaning} />
+                            <span>{o.option}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="muted">–</span>
+                    )}
+                    <button className="btn btn-sm" onClick={() => setApiFor(s)} title="POST-Anfrage zum Setzen des Feedbacks anzeigen">
+                      API
+                    </button>
+                  </div>
                 </td>
                 <td className="small" style={{ minWidth: 200, maxWidth: 320 }}>
                   {s.feedbacks.map((f) => (
@@ -594,6 +617,7 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
           </tbody>
         </table>
       </div>
+      {apiFor && <FeedbackApiModal runId={runId} step={apiFor} customerName={run.customerName} onClose={() => setApiFor(null)} />}
       {testing && <RunStepTestModal runId={runId} customerName={run.customerName} step={testing} onClose={() => setTesting(null)} />}
       {feedbackFor && (
         <FeedbackModal

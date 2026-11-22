@@ -7,6 +7,7 @@ import { PlaceholderPicker, WithPlaceholders } from "@/components/Placeholders";
 import { api, errorText } from "@/lib/client";
 import type { PlaceholderGroup } from "@/lib/placeholders";
 import type { ActionView, JourneyStepView, JourneyView } from "@/lib/types";
+import { FeedbackOptionsModal, MeaningBadge } from "./FeedbackOptionsModal";
 import { StepTestModal } from "./StepTestModal";
 
 type Draft = { id: string | null; actionId: string; content: string };
@@ -21,6 +22,7 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
   const [busy, setBusy] = useState(false);
   const [catalog, setCatalog] = useState<PlaceholderGroup[] | null>(null);
   const [testing, setTesting] = useState<JourneyStepView | null>(null);
+  const [options, setOptions] = useState<{ step: JourneyStepView; nr: number } | null>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -64,9 +66,11 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
 
   return (
     <div className="modal-back" onClick={close}>
-      <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+      <div className="modal modal-xl" onClick={(e) => e.stopPropagation()}>
         <h2>Schritte von «{journey.name}»</h2>
-        <p className="small muted">Jeder Schritt ist eine Aktion mit ihrem Inhalt – in der Reihenfolge der Journey.</p>
+        <p className="small muted">
+          Jeder Schritt ist eine Aktion mit ihrem Inhalt – in der Reihenfolge der Journey – und den möglichen Feedbacks des Kunden.
+        </p>
         <Notice kind="error">{error}</Notice>
         {noActions && (
           <Notice kind="warn">
@@ -86,6 +90,7 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
                   <th className="num">#</th>
                   <th>Aktion</th>
                   <th>Inhalt</th>
+                  <th>Feedback-Optionen</th>
                   <th />
                 </tr>
               </thead>
@@ -98,6 +103,21 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
                     </td>
                     <td className="small" style={{ whiteSpace: "pre-wrap" }}>
                       {s.content ? <WithPlaceholders text={s.content} catalog={catalog} /> : <span className="muted">–</span>}
+                    </td>
+                    <td className="small">
+                      {s.feedbackOptions.length ? (
+                        <ul style={{ listStyle: "none", margin: "0 0 6px", padding: 0, display: "grid", gap: 4 }}>
+                          {s.feedbackOptions.map((o) => (
+                            <li key={o.id} className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                              <MeaningBadge meaning={o.meaning} />
+                              <span>{o.option}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <button className="btn btn-sm" disabled={busy} onClick={() => setOptions({ step: s, nr: i + 1 })}>
+                        Optionen ({s.feedbackOptions.length})
+                      </button>
                     </td>
                     <td>
                       <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: 4 }}>
@@ -122,7 +142,7 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
                           className="btn btn-sm btn-danger"
                           disabled={busy}
                           onClick={() => {
-                            if (window.confirm(`Schritt ${i + 1} löschen?`)) act(() => api(`${base}/${s.id}`, { method: "DELETE" }));
+                            if (window.confirm(`Schritt ${i + 1} löschen?${s.feedbackOptions.length ? ` Seine ${s.feedbackOptions.length} Feedback-Optionen werden mitgelöscht.` : ""}`)) act(() => api(`${base}/${s.id}`, { method: "DELETE" }));
                           }}
                         >
                           Löschen
@@ -192,6 +212,18 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
           >
             + Schritt
           </button>
+        )}
+
+        {options && (
+          <FeedbackOptionsModal
+            base={`${base}/${options.step.id}/feedback-options`}
+            title={`Schritt ${options.nr} · ${actionName(options.step.actionId)}`}
+            initial={options.step.feedbackOptions}
+            onClose={(feedbackOptions) => {
+              setSteps((list) => list && list.map((x) => (x.id === options.step.id ? { ...x, feedbackOptions } : x)));
+              setOptions(null);
+            }}
+          />
         )}
 
         {testing && <StepTestModal journeyId={journey.id} step={testing} actionName={actionName(testing.actionId)} onClose={() => setTesting(null)} />}

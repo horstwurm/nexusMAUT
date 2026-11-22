@@ -1,6 +1,7 @@
 import "server-only";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import type { DomainName } from "@/lib/domains";
+import type { FeedbackMeaning } from "@/lib/feedbackOptions";
 import type { PositionValues } from "@/lib/positions";
 import type { Condition } from "@/lib/rules";
 import type { ListSpec } from "@/lib/serviceCall";
@@ -227,6 +228,19 @@ export type JourneyStepDoc = {
   actionId: ObjectId;
   /** free text (multi-line) */
   content: string;
+  sort: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/** A possible feedback to a journey step (relation journeyStepFeedbackOptions); option unique per step. */
+export type JourneyStepFeedbackOptionDoc = {
+  _id: ObjectId;
+  journeyId: ObjectId;
+  stepId: ObjectId;
+  /** the answer, e.g. «Termin vereinbart» */
+  option: string;
+  meaning: FeedbackMeaning;
   sort: number;
   createdAt: Date;
   updatedAt: Date;
@@ -505,6 +519,12 @@ async function init(db: Db) {
     c.actionAttributes.createIndex({ actionId: 1, sort: 1 }),
     c.journeys.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "journey_name_unique" }),
     c.journeySteps.createIndex({ journeyId: 1, sort: 1 }),
+    c.feedbackOptions.createIndex(
+      { stepId: 1, option: 1 },
+      { unique: true, collation: { locale: "de", strength: 2 }, name: "feedback_option_unique" },
+    ),
+    c.feedbackOptions.createIndex({ stepId: 1, sort: 1 }),
+    c.feedbackOptions.createIndex({ journeyId: 1 }),
     c.services.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "service_name_unique" }),
     c.services.createIndex({ serviceType: 1 }),
     ...[c.servicePutAttributes, c.serviceGetAttributes].flatMap((col) => [
@@ -552,6 +572,7 @@ function collectionsOf(db: Db) {
     actionAttributes: db.collection<ActionAttributeDoc>("actionAttributes"),
     journeys: db.collection<JourneyDoc>("journeys"),
     journeySteps: db.collection<JourneyStepDoc>("journeySteps"),
+    feedbackOptions: db.collection<JourneyStepFeedbackOptionDoc>("journeyStepFeedbackOptions"),
     customerJourneys: db.collection<CustomerJourneyDoc>("customerJourneys"),
     customerJourneySteps: db.collection<CustomerJourneyStepDoc>("customerJourneySteps"),
     customerFeedbacks: db.collection<CustomerFeedbackDoc>("customerFeedbacks"),

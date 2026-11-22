@@ -2,12 +2,12 @@ import { z } from "zod";
 import { requireUser } from "@/lib/server/auth";
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
-import { assertAction, toStep } from "@/lib/server/journeys";
+import { assertAction, feedbackOptionsOf, toStep } from "@/lib/server/journeys";
 import { journeyStepInput } from "@/lib/server/schemas";
 
 // PUT    /api/journeys/ID/steps/SID { actionId, content? } – change (admins)
 // PATCH  /api/journeys/ID/steps/SID { sort } – reorder (admins)
-// DELETE /api/journeys/ID/steps/SID (admins)
+// DELETE /api/journeys/ID/steps/SID (admins) – with its feedback options
 
 type Ctx = { params: Promise<{ id: string; stepId: string }> };
 
@@ -31,7 +31,7 @@ export const PUT = route(async (req: Request, ctx: Ctx) => {
     { returnDocument: "after" },
   );
   if (!doc) throw new HttpError(404, "Nicht gefunden");
-  return Response.json(toStep(doc), { headers: NO_STORE });
+  return Response.json(toStep(doc, await feedbackOptionsOf([doc._id])), { headers: NO_STORE });
 });
 
 export const PATCH = route(async (req: Request, ctx: Ctx) => {
@@ -41,13 +41,15 @@ export const PATCH = route(async (req: Request, ctx: Ctx) => {
   const { journeySteps } = await collections();
   const doc = await journeySteps.findOneAndUpdate(filter, { $set: { sort, updatedAt: new Date() } }, { returnDocument: "after" });
   if (!doc) throw new HttpError(404, "Nicht gefunden");
-  return Response.json(toStep(doc), { headers: NO_STORE });
+  return Response.json(toStep(doc, await feedbackOptionsOf([doc._id])), { headers: NO_STORE });
 });
 
 export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   await requireUser("admin");
-  const { journeySteps } = await collections();
-  const res = await journeySteps.deleteOne(await filterOf(ctx));
+  const { journeySteps, feedbackOptions } = await collections();
+  const filter = await filterOf(ctx);
+  const res = await journeySteps.deleteOne(filter);
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
+  await feedbackOptions.deleteMany({ stepId: filter._id });
   return new Response(null, { status: 204 });
 });

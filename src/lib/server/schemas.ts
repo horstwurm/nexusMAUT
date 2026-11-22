@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { dateOfBirthError } from "@/lib/customers";
 import { CODE_RE, type DomainName } from "@/lib/domains";
+import { FEEDBACK_MEANINGS } from "@/lib/feedbackOptions";
 import { listSpecProblem, normalizeListSpec } from "@/lib/serviceCall";
 import { COUNT_OPERATORS, OPERATOR_NAMES, rangeProblem, type CustomerField, type Operator } from "@/lib/rules";
 import { ATTRIBUTE_TYPE_NAMES, attributeDefinitionError, normalizeOptions, type AttributeType } from "@/lib/typeAttributes";
@@ -295,4 +296,10 @@ export const profileInput = z.object(personName);
 export const authSettingsInput = z.object({
   mode: z.enum(["nexusIdentity", "local"]),
   allowRegistration: z.boolean(),
+});
+
+/** A feedback option of a journey step */
+export const feedbackOptionInput = z.object({
+  option: z.string().trim().min(1, "Option fehlt").max(200, "Option ist zu lang (max. 200 Zeichen)"),
+  meaning: z.enum(FEEDBACK_MEANINGS, { message: "Bedeutung muss OK, WARN oder NOK sein" }),
 });

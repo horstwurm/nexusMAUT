@@ -1,3 +1,4 @@
+import type { FeedbackMeaning } from "@/lib/feedbackOptions";
 // Shapes the server hands to client components (JSON-safe).
 
 import type { Condition } from "./rules";
@@ -127,6 +128,14 @@ export type JourneyView = {
   stepCount: number;
 };
 
+export type FeedbackOptionView = {
+  id: string;
+  stepId: string;
+  option: string;
+  meaning: FeedbackMeaning;
+  sort: number;
+};
+
 export type JourneyStepView = {
   id: string;
   journeyId: string;
@@ -135,6 +144,8 @@ export type JourneyStepView = {
   content: string;
   sort: number;
   updatedAt: string;
+  /** relation journeyStepFeedbackOptions, in order */
+  feedbackOptions: FeedbackOptionView[];
 };
 
 export type ServiceView = {
@@ -197,6 +208,8 @@ export type CustomerJourneyStepView = {
   dataProblems: string[];
   dataCheckedAt: string | null;
   feedbacks: CustomerFeedbackView[];
+  /** the template step's feedback options (current, in order) */
+  feedbackOptions: FeedbackOptionView[];
 };
 
 export type ActionView = {

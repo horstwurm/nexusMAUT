@@ -2,6 +2,7 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import type { CustomerFeedbackView, CustomerJourneyStepView, CustomerJourneyView } from "@/lib/types";
 import { collections, type CustomerFeedbackDoc, type CustomerJourneyDoc, type CustomerJourneyStepDoc } from "./db";
+import { toFeedbackOption } from "./journeys";
 import { HttpError } from "./http";
 import { loadRuleDataset, matchingCustomers } from "./rules";
 import { previewStep, type ServiceCache, type StepPreview } from "./stepPreview";
@@ -53,8 +54,12 @@ export const toFeedbackView = (f: CustomerFeedbackDoc): CustomerFeedbackView => 
 });
 
 export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<CustomerJourneyStepView[]> {
-  const { actions, customerFeedbacks } = await collections();
-  const feedbacks = await customerFeedbacks.find({ customerJourneyStepId: { $in: list.map((s) => s._id) } }).sort({ createdAt: 1 }).toArray();
+  const { actions, customerFeedbacks, feedbackOptions } = await collections();
+  const [feedbacks, options] = await Promise.all([
+    customerFeedbacks.find({ customerJourneyStepId: { $in: list.map((s) => s._id) } }).sort({ createdAt: 1 }).toArray(),
+    // the options of the template step (live, not copied: a deleted template step has none)
+    feedbackOptions.find({ stepId: { $in: [...new Map(list.map((s) => [s.stepId.toHexString(), s.stepId])).values()] } }).sort({ sort: 1, createdAt: 1 }).toArray(),
+  ]);
   const names = new Map(
     (await actions.find({ _id: { $in: [...new Set(list.map((s) => s.actionId))] } }, { projection: { name: 1 } }).toArray()).map((a) => [
       a._id.toHexString(),
@@ -77,6 +82,7 @@ export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<Custo
     dataProblems: s.dataProblems ?? [],
     dataCheckedAt: s.dataCheckedAt?.toISOString() ?? null,
     feedbacks: feedbacks.filter((f) => f.customerJourneyStepId.equals(s._id)).map(toFeedbackView),
+    feedbackOptions: options.filter((o) => o.stepId.equals(s.stepId)).map(toFeedbackOption),
   }));
 }
 

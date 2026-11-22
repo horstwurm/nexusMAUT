@@ -1,7 +1,7 @@
 import "server-only";
 import type { ObjectId } from "mongodb";
-import type { JourneyView, JourneyStepView } from "@/lib/types";
-import { collections, type JourneyDoc, type JourneyStepDoc } from "./db";
+import type { FeedbackOptionView, JourneyView, JourneyStepView } from "@/lib/types";
+import { collections, type JourneyDoc, type JourneyStepDoc, type JourneyStepFeedbackOptionDoc } from "./db";
 import { HttpError } from "./http";
 
 export const toJourney = (j: JourneyDoc, stepCount = 0): JourneyView => ({
@@ -12,14 +12,37 @@ export const toJourney = (j: JourneyDoc, stepCount = 0): JourneyView => ({
   stepCount,
 });
 
-export const toStep = (s: JourneyStepDoc): JourneyStepView => ({
+export const toFeedbackOption = (o: JourneyStepFeedbackOptionDoc): FeedbackOptionView => ({
+  id: o._id.toHexString(),
+  stepId: o.stepId.toHexString(),
+  option: o.option,
+  meaning: o.meaning,
+  sort: o.sort,
+});
+
+export const toStep = (s: JourneyStepDoc, options: JourneyStepFeedbackOptionDoc[] = []): JourneyStepView => ({
   id: s._id.toHexString(),
   journeyId: s.journeyId.toHexString(),
   actionId: s.actionId.toHexString(),
   content: s.content ?? "",
   sort: s.sort,
   updatedAt: s.updatedAt.toISOString(),
+  feedbackOptions: options.filter((o) => o.stepId.equals(s._id)).map(toFeedbackOption),
 });
+
+/** The feedback options of the given steps, in order. */
+export async function feedbackOptionsOf(stepIds: ObjectId[]) {
+  const { feedbackOptions } = await collections();
+  return feedbackOptions.find({ stepId: { $in: stepIds } }).sort({ sort: 1, createdAt: 1 }).toArray();
+}
+
+/** 404 unless the step belongs to the journey (parent of the feedback option routes). */
+export async function requireStep(journeyId: ObjectId, stepId: ObjectId) {
+  const { journeySteps } = await collections();
+  const doc = await journeySteps.findOne({ _id: stepId, journeyId });
+  if (!doc) throw new HttpError(404, "Schritt nicht gefunden");
+  return doc;
+}
 
 /** All journeys, by name, with their number of steps. */
 export async function listJourneys() {

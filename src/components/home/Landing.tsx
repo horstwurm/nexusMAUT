@@ -48,6 +48,7 @@ const AREAS: Area[] = [
       { icon: "steps", text: "Schritte in fester Reihenfolge, jeder mit einer Aktion (z.B. Brief, Anruf, Termin)" },
       { icon: "braces", text: "Platzhalter für Kunde, Produkte, Positionen, Transaktionen und Service-Werte – auch Listen mit Summen und Wiederholblöcken" },
       { icon: "check", text: "Schritt testen: der Inhalt, aufbereitet für einen echten Kunden" },
+      { icon: "message", text: "Feedback-Optionen pro Schritt – die möglichen Antworten des Kunden, jede als OK, Warnung oder Nicht OK eingestuft" },
       { icon: "alert", text: "Unbekannte Platzhalter werden markiert, bevor sie jemand sieht" },
     ],
     visual: <JourneyVisual />,
@@ -74,7 +75,8 @@ const AREAS: Area[] = [
       { icon: "route", text: "Zuweisen per Selektion oder einzeln – wer die Journey schon aktiv hat, wird übersprungen" },
       { icon: "checklist", text: "Fortschritt pro Schritt: erledigt, übersprungen, offen – der Inhalt wird beim Erledigen für den Kunden aufbereitet und gespeichert" },
       { icon: "alert", text: "«Daten prüfen» findet Schritte, denen Daten fehlen – markiert als «Datenfehler»" },
-      { icon: "star", text: "Kundenfeedback pro Schritt, mit Kommentar und Bewertung von 1 bis 5" },
+      { icon: "star", text: "Kundenfeedback pro Schritt, mit Kommentar und Bewertung von 1 bis 5 – die Feedback-Optionen des Schritts gleich daneben" },
+      { icon: "braces", text: "«API» pro Schritt: die fertige POST-Anfrage zum Setzen des Feedbacks, als HTTP und curl zum Kopieren" },
     ],
     visual: <RunVisual />,
   },
@@ -125,6 +127,10 @@ const FAQ = (mode: AuthMode): { q: string; a: string }[] => [
   {
     q: "Was ist der Mock-Schalter?",
     a: "Ein Schalter pro Service: Ist er an, wird der Service nicht aufgerufen, sondern liefert Zufallswerte passend zu seinen GET-Attributen. So kannst Du Selektionen und Journeys schon ausprobieren, bevor die Schnittstelle steht. Mock-Werte sind überall als «Mock» markiert.",
+  },
+  {
+    q: "Was sind Feedback-Optionen?",
+    a: "Die Antworten, die ein Kunde auf einen Schritt geben kann, z.B. «Termin vereinbart» (OK), «Rückruf gewünscht» (Warnung) oder «Kein Interesse» (Nicht OK). Du legst sie pro Journey-Schritt fest; in den KundenJourneys stehen sie neben dem erfassten Feedback, und «API» zeigt die Anfrage, mit der ein Feedback gesetzt wird.",
   },
   {
     q: "Was prüft «Daten prüfen»?",

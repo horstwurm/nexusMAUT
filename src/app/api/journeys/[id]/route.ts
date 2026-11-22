@@ -32,11 +32,12 @@ export const PUT = route(async (req: Request, ctx: Ctx) => {
 export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   await requireUser("admin");
   const id = parseId((await ctx.params).id);
-  const { journeys, journeySteps, customerJourneys } = await collections();
+  const { journeys, journeySteps, customerJourneys, feedbackOptions } = await collections();
   const used = await customerJourneys.countDocuments({ journeyId: id });
   if (used) throw new HttpError(409, `Die Journey ist ${used} Kunden zugewiesen (KundenJourneys) – zuerst dort löschen`);
   const res = await journeys.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
   await journeySteps.deleteMany({ journeyId: id }); // its steps go with it
+  await feedbackOptions.deleteMany({ journeyId: id });
   return new Response(null, { status: 204 });
 });
