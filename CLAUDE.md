@@ -76,7 +76,8 @@ All pages use the full window width (`.page`, 24px side padding).
 - **Login mode** (`src/lib/server/authSettings.ts`, `settings` doc `_id: "auth"`
   `{ mode: nexusIdentity | local, allowRegistration }`, typed view
   `authSettings` on the same collection; without a doc `AUTH_MODE`, default
-  nexusIdentity). Admin tab «Anmeldung» (`AuthAdmin`, toggle switches; `GET/PUT
+  local – a fresh deployment works without nexusIdentity; the first account
+  registered becomes admin). Admin tab «Anmeldung» (`AuthAdmin`, toggle switches; `GET/PUT
   /api/settings/auth`, admins). Lock-out guards: switching to local needs a
   password of the acting admin (409), to nexusIdentity client id + secret (409);
   emergency `npm run auth:mode`. Existing sessions stay valid on a switch.

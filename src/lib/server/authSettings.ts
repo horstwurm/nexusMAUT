@@ -2,11 +2,12 @@ import "server-only";
 import type { AuthSettingsView } from "@/lib/types";
 import { collections, type AuthMode } from "./db";
 
-// How people log in: via nexusIdentity (OIDC, default) or with the own login
-// (e-mail + password, stored here). Admin → Anmeldung switches it; without a
-// saved setting AUTH_MODE=local|nexusIdentity decides (default nexusIdentity).
+// How people log in: with the own login (e-mail + password, stored here –
+// default) or via nexusIdentity (OIDC). Admin → Anmeldung switches it; without
+// a saved setting AUTH_MODE=local|nexusIdentity decides (default local, so a
+// fresh deployment works without nexusIdentity).
 
-const envMode = (): AuthMode => (process.env.AUTH_MODE?.trim().toLowerCase() === "local" ? "local" : "nexusIdentity");
+const envMode = (): AuthMode => (process.env.AUTH_MODE?.trim().toLowerCase() === "nexusidentity" ? "nexusIdentity" : "local");
 
 export async function authSettings(): Promise<{ mode: AuthMode; allowRegistration: boolean; source: "admin" | "env" }> {
   const { authSettings } = await collections();

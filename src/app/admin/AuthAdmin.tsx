@@ -95,7 +95,7 @@ export function AuthAdmin({ initial, myPassword, myIdentity }: { initial: AuthSe
       {!view.oidcConfigured && <Notice kind="warn">nexusIdentity ist nicht konfiguriert (NEXUS_CLIENT_ID / NEXUS_CLIENT_SECRET fehlen).</Notice>}
       {local && <Notice kind="info">Für «Passwort vergessen» muss der E-Mail-Versand eingerichtet sein (Tab «E-Mail»); in der Entwicklung steht der Link in der Server-Konsole.</Notice>}
       <p className="small muted" style={{ marginBottom: 0 }}>
-        {view.source === "admin" ? `Zuletzt geändert ${formatDate(view.updatedAt, true)}.` : "Noch nicht gespeichert – es gilt AUTH_MODE (Standard nexusIdentity)."} Notfall:{" "}
+        {view.source === "admin" ? `Zuletzt geändert ${formatDate(view.updatedAt, true)}.` : "Noch nicht gespeichert – es gilt AUTH_MODE (Standard: eigene Anmeldung)."} Notfall:{" "}
         <code>npm run auth:mode -- nexusIdentity</code> bzw. <code>local</code>.
       </p>
     </section>
