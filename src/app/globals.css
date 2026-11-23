@@ -141,6 +141,11 @@ input.code-input { font-family: ui-monospace, Menlo, monospace; font-size: 22px;
 .btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
 .btn-danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .btn-danger:hover { background: var(--danger-bg); }
+/* filled red: actions with an effect outside the app («Ausführen», «Senden») */
+.btn-danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn-danger-solid:hover { background: var(--danger); filter: brightness(1.08); }
+.execute-count { font-size: 18px; margin: 4px 0 10px; }
+.execute-count strong { font-size: 28px; color: var(--danger); margin-right: 4px; }
 .btn-block { width: 100%; padding: 11px 16px; }
 .btn-sm { padding: 5px 10px; font-size: 13px; }
 .btn-link { background: none; border: 0; padding: 0; color: var(--accent); font-weight: 500; cursor: pointer; font: inherit; }
@@ -197,6 +202,14 @@ tr.clickable:hover td { background: var(--surface-2); }
 .modal-wide { max-width: 760px; }
 /* nearly the full window (journey steps with content and feedback options) */
 .modal-xl { max-width: 1400px; }
+/* status dropdown of a KundenJourney step, tinted like its badge */
+select.step-status { width: auto; padding: 4px 8px; font-size: 13px; font-weight: 600; }
+select.step-status.badge-ok { background: var(--ok-bg); color: var(--ok); }
+select.step-status.badge-warn { background: var(--warn-bg); color: var(--warn); }
+select.step-status.badge-accent { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+/* KundenJourney step «API»: action call | feedback, stacked on narrow screens */
+.api-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 24px; align-items: start; }
+.api-columns > section { min-width: 0; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; flex-wrap: wrap; }
 
 /* --- nexusMAUT ------------------------------------------------------------ */

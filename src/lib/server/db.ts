@@ -1,7 +1,8 @@
 import "server-only";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import type { DomainName } from "@/lib/domains";
-import type { FeedbackMeaning } from "@/lib/feedbackOptions";
+import { OLD_MEANINGS, type FeedbackMeaning } from "@/lib/feedbackOptions";
+import type { StepStatus } from "@/lib/stepStatus";
 import type { PositionValues } from "@/lib/positions";
 import type { Condition } from "@/lib/rules";
 import type { ListSpec } from "@/lib/serviceCall";
@@ -301,7 +302,8 @@ export type CustomerJourneyStepDoc = {
   /** the template content at assignment */
   template: string;
   sort: number;
-  status: "open" | "done" | "skipped";
+  /** «open» until 2026-11-23 – `init` turns it into «proposal» once */
+  status: StepStatus;
   /** rendered for the customer when done (placeholders filled) */
   content: string | null;
   /** placeholders without a value at rendering */
@@ -316,7 +318,19 @@ export type CustomerJourneyStepDoc = {
   /** what is missing (placeholder: reason / service error) */
   dataProblems?: string[];
   dataCheckedAt?: Date | null;
+  /** last «Ausführen»: the step sent to its action's URL (ok → status done) */
+  execution?: StepExecution;
   updatedAt: Date;
+};
+
+export type StepExecution = {
+  at: Date;
+  ok: boolean;
+  url: string;
+  /** HTTP status of the action's answer */
+  httpStatus?: number;
+  error?: string;
+  by: string;
 };
 
 /** A customer's feedback on a step of a KundenJourney (relation customerFeedback). */
@@ -341,6 +355,12 @@ export type ActionDoc = {
   description: string;
   /** http(s) address; "" = none (missing on actions created before 2026-11-21) */
   url?: string;
+  /**
+   * API key of the system that carries out the action – lets it set the
+   * feedback of KundenJourney steps with this action (`Authorization: Bearer`).
+   * Only the sha256 is stored; the key is shown once when created.
+   */
+  apiKey?: { hash: string; hint: string; createdAt: Date; createdBy: string; lastUsedAt?: Date };
   createdAt: Date;
   updatedAt: Date;
 };
@@ -470,8 +490,25 @@ async function convertServiceConditions(db: Db) {
   }
 }
 
+/** Feedback options stored with the first meanings (OK / WARN / NOK) get today's (once). */
+async function convertFeedbackMeanings(db: Db) {
+  const col = db.collection("journeyStepFeedbackOptions");
+  for (const [old, now] of Object.entries(OLD_MEANINGS)) {
+    const res = await col.updateMany({ meaning: old }, { $set: { meaning: now } });
+    if (res.modifiedCount) console.log(`[db] feedback options: meaning ${old} → ${now} (${res.modifiedCount})`);
+  }
+}
+
+/** KundenJourney steps with the old status «open» become «proposal» (Vorschlag), once. */
+async function convertOpenSteps(db: Db) {
+  const res = await db.collection("customerJourneySteps").updateMany({ status: "open" }, { $set: { status: "proposal" } });
+  if (res.modifiedCount) console.log(`[db] KundenJourney steps: open → proposal (${res.modifiedCount})`);
+}
+
 async function init(db: Db) {
   await renameOld(db);
+  await convertOpenSteps(db);
+  await convertFeedbackMeanings(db);
   await movePositionsToCustomers(db);
   await convertServiceConditions(db);
   const c = collectionsOf(db);
@@ -511,6 +548,7 @@ async function init(db: Db) {
     c.customerComPrefs.createIndex({ comPrefType: 1 }),
     c.rules.createIndex({ name: 1 }),
     c.actions.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "action_name_unique" }),
+    c.actions.createIndex({ "apiKey.hash": 1 }, { unique: true, partialFilterExpression: { "apiKey.hash": { $exists: true } }, name: "action_api_key" }),
     // an attribute name once per action, case-insensitive
     c.actionAttributes.createIndex(
       { actionId: 1, attribute: 1 },

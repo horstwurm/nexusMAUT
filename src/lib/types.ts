@@ -1,3 +1,4 @@
+import type { StepStatus } from "@/lib/stepStatus";
 import type { FeedbackMeaning } from "@/lib/feedbackOptions";
 // Shapes the server hands to client components (JSON-safe).
 
@@ -163,7 +164,7 @@ export type ServiceView = {
 };
 
 export type CustomerJourneyStatus = "active" | "done" | "cancelled";
-export type CustomerJourneyStepStatus = "open" | "done" | "skipped";
+export type CustomerJourneyStepStatus = StepStatus;
 
 /** A journey for one customer (list row). */
 export type CustomerJourneyView = {
@@ -210,6 +211,29 @@ export type CustomerJourneyStepView = {
   feedbacks: CustomerFeedbackView[];
   /** the template step's feedback options (current, in order) */
   feedbackOptions: FeedbackOptionView[];
+  /** last «Ausführen» */
+  execution: { at: string; ok: boolean; url: string; httpStatus: number | null; error: string | null } | null;
+};
+
+/** «Ausführen»: what would be sent */
+export type ExecutionPreview = {
+  /** steps «Bereit zur Ausführung» in active KundenJourneys of the journey */
+  total: number;
+  /** will be sent (action with URL) */
+  sendable: number;
+  byAction: { actionId: string; name: string; url: string; count: number }[];
+  /** of the sendable ones: last data check found a problem (checked again when sending) */
+  knownDataErrors: number;
+};
+
+export type ExecutionResult = {
+  sent: number;
+  failed: number;
+  dataErrors: number;
+  withoutUrl: number;
+  /** not processed in this round (time budget) – press «Ausführen» again */
+  remaining: number;
+  errors: string[];
 };
 
 export type ActionView = {
@@ -221,6 +245,8 @@ export type ActionView = {
   updatedAt: string;
   /** number of action attributes */
   attributeCount: number;
+  /** API key for the feedback API – never the key itself */
+  apiKey: { hint: string; createdAt: string; lastUsedAt: string | null } | null;
 };
 
 export type RuleView = {

@@ -1,4 +1,5 @@
 import "server-only";
+import { OPEN_STEP_STATUSES } from "@/lib/stepStatus";
 import { collections, type ServiceFetched } from "./db";
 
 // Homepage data: the counts for the public landing page and the «Heute» panel
@@ -35,7 +36,7 @@ export async function today(): Promise<Today> {
   const runs = await c.customerJourneys.find({ status: "active" }, { projection: { customerId: 1, journeyId: 1, startedAt: 1 } }).toArray();
   const openSteps = runs.length
     ? await c.customerJourneySteps
-        .find({ customerJourneyId: { $in: runs.map((r) => r._id) }, status: "open" }, { projection: { customerJourneyId: 1, actionId: 1, sort: 1, dataStatus: 1 } })
+        .find({ customerJourneyId: { $in: runs.map((r) => r._id) }, status: { $in: [...OPEN_STEP_STATUSES] } }, { projection: { customerJourneyId: 1, actionId: 1, sort: 1, dataStatus: 1 } })
         .sort({ sort: 1 })
         .toArray()
     : [];

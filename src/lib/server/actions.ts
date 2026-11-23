@@ -12,6 +12,9 @@ export const toAction = (a: ActionDoc, attributeCount = 0): ActionView => ({
   url: a.url ?? "",
   updatedAt: a.updatedAt.toISOString(),
   attributeCount,
+  apiKey: a.apiKey
+    ? { hint: a.apiKey.hint, createdAt: a.apiKey.createdAt.toISOString(), lastUsedAt: a.apiKey.lastUsedAt?.toISOString() ?? null }
+    : null,
 });
 
 /** All actions, by name, with their number of attributes. */

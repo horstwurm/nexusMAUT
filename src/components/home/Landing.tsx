@@ -48,7 +48,7 @@ const AREAS: Area[] = [
       { icon: "steps", text: "Schritte in fester Reihenfolge, jeder mit einer Aktion (z.B. Brief, Anruf, Termin)" },
       { icon: "braces", text: "Platzhalter für Kunde, Produkte, Positionen, Transaktionen und Service-Werte – auch Listen mit Summen und Wiederholblöcken" },
       { icon: "check", text: "Schritt testen: der Inhalt, aufbereitet für einen echten Kunden" },
-      { icon: "message", text: "Feedback-Optionen pro Schritt – die möglichen Antworten des Kunden, jede als OK, Warnung oder Nicht OK eingestuft" },
+      { icon: "message", text: "Feedback-Optionen pro Schritt – die möglichen Antworten des Kunden, jede eingestuft von Lead und Chance über Interesse bis Kein Interesse" },
       { icon: "alert", text: "Unbekannte Platzhalter werden markiert, bevor sie jemand sieht" },
     ],
     visual: <JourneyVisual />,
@@ -73,8 +73,9 @@ const AREAS: Area[] = [
     lead: "Weise eine Journey einer ganzen Kunden Selektion oder einzelnen Kunden zu – und verfolge pro Kunde, wo er steht.",
     features: [
       { icon: "route", text: "Zuweisen per Selektion oder einzeln – wer die Journey schon aktiv hat, wird übersprungen" },
-      { icon: "checklist", text: "Fortschritt pro Schritt: erledigt, übersprungen, offen – der Inhalt wird beim Erledigen für den Kunden aufbereitet und gespeichert" },
+      { icon: "checklist", text: "Status pro Schritt: Vorschlag, Bereit zur Ausführung, Ausgesetzt, Erledigt oder Übersprungen – beim Erledigen wird der Inhalt für den Kunden aufbereitet und gespeichert" },
       { icon: "alert", text: "«Daten prüfen» findet Schritte, denen Daten fehlen – markiert als «Datenfehler»" },
+      { icon: "bolt", text: "«Ausführen» sendet alle Schritte «Bereit zur Ausführung» an das System ihrer Aktion – nach Bestätigung, Schritte mit fehlenden Daten bleiben zurück" },
       { icon: "star", text: "Kundenfeedback pro Schritt, mit Kommentar und Bewertung von 1 bis 5 – die Feedback-Optionen des Schritts gleich daneben" },
       { icon: "braces", text: "«API» pro Schritt: die fertige POST-Anfrage zum Setzen des Feedbacks, als HTTP und curl zum Kopieren" },
     ],
@@ -114,7 +115,7 @@ const FAQ = (mode: AuthMode): { q: string; a: string }[] => [
   },
   {
     q: "Verschickt nexusMAUT selbst E-Mails an Kunden?",
-    a: "Nein, noch nicht. Schritte einer KundenJourney werden von Hand als erledigt markiert; dabei wird der Inhalt für den Kunden aufbereitet und gespeichert. Die E-Mail-Einstellungen in der Administration dienen bisher nur dem Test-Versand.",
+    a: "Nicht selbst. «Ausführen» übergibt die Schritte «Bereit zur Ausführung» – mit dem für den Kunden aufbereiteten Inhalt – an das System der jeweiligen Aktion (z.B. Versand, Druck, Callcenter), das sich darum kümmert und das Feedback zurückmeldet. Schritte lassen sich auch von Hand als erledigt markieren. Die E-Mail-Einstellungen in der Administration dienen bisher dem Test-Versand und den Passwort-Links.",
   },
   {
     q: "Was sind Platzhalter?",
@@ -130,7 +131,7 @@ const FAQ = (mode: AuthMode): { q: string; a: string }[] => [
   },
   {
     q: "Was sind Feedback-Optionen?",
-    a: "Die Antworten, die ein Kunde auf einen Schritt geben kann, z.B. «Termin vereinbart» (OK), «Rückruf gewünscht» (Warnung) oder «Kein Interesse» (Nicht OK). Du legst sie pro Journey-Schritt fest; in den KundenJourneys stehen sie neben dem erfassten Feedback, und «API» zeigt die Anfrage, mit der ein Feedback gesetzt wird.",
+    a: "Die Antworten, die ein Kunde auf einen Schritt geben kann, z.B. «Termin vereinbart» (Lead), «Bitte Offerte senden» (Chance), «Rückruf in einem halben Jahr» (Kein Interesse aktuell) oder «Nein danke» (Kein Interesse). Du legst sie pro Journey-Schritt fest; in den KundenJourneys stehen sie neben dem erfassten Feedback, und «API» zeigt die Anfrage, mit der ein Feedback gesetzt wird.",
   },
   {
     q: "Was prüft «Daten prüfen»?",
@@ -153,6 +154,7 @@ const SECURITY = (mode: AuthMode): { icon: HomeIconName; title: string; text: st
   { icon: "shield", title: "Rechte auf dem Server", text: "Jede Anfrage wird gegen die Rolle geprüft – ein ausgeblendeter Knopf ist nie der einzige Schutz." },
   { icon: "lock", title: "Verschlüsselte Geheimnisse", text: "Das SMTP-Passwort wird mit AES-256-GCM verschlüsselt gespeichert und nie an die Seite geschickt." },
   { icon: "server", title: "Services auf dem Server", text: "Services werden serverseitig aufgerufen; ihre Adressen legen nur Administratoren fest." },
+  { icon: "key", title: "API-Schlüssel pro Aktion", text: "Externe Systeme melden Feedback nur für Schritte ihrer eigenen Aktion; gespeichert wird nur ein Hash, Widerrufen geht mit einem Klick." },
   { icon: "eye", title: "Kein Tracking", text: "Keine Analyse-, Werbe- oder Tracking-Cookies – nur das Anmelde-Cookie." },
 ];
 

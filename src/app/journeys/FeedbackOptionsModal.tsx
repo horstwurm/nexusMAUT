@@ -27,7 +27,7 @@ export function FeedbackOptionsModal({
   onClose: (options: FeedbackOptionView[]) => void;
 }) {
   const [list, setList] = useState(initial);
-  const [draft, setDraft] = useState<Draft>({ id: null, option: "", meaning: "OK" });
+  const [draft, setDraft] = useState<Draft>({ id: null, option: "", meaning: "INTEREST" });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const close = () => onClose(list);
@@ -119,7 +119,7 @@ export function FeedbackOptionsModal({
             e.preventDefault();
             const body = { option: draft.option, meaning: draft.meaning };
             const ok = await act(() => api(draft.id ? `${base}/${draft.id}` : base, { method: draft.id ? "PUT" : "POST", body }));
-            if (ok) setDraft({ id: null, option: "", meaning: "OK" });
+            if (ok) setDraft({ id: null, option: "", meaning: "INTEREST" });
           }}
         >
           <h3>{draft.id ? "Option bearbeiten" : "Neue Option"}</h3>
@@ -136,18 +136,18 @@ export function FeedbackOptionsModal({
                 autoFocus
               />
             </label>
-            <label className="field" style={{ flex: "0 0 160px", marginBottom: 0 }}>
+            <label className="field" style={{ flex: "0 0 210px", marginBottom: 0 }}>
               <span>Bedeutung</span>
               <select value={draft.meaning} onChange={(e) => setDraft({ ...draft, meaning: e.target.value as FeedbackMeaning })}>
                 {FEEDBACK_MEANINGS.map((m) => (
                   <option key={m} value={m}>
-                    {m} – {MEANING_INFO[m].label}
+                    {MEANING_INFO[m].label}
                   </option>
                 ))}
               </select>
             </label>
             {draft.id && (
-              <button type="button" className="btn" onClick={() => setDraft({ id: null, option: "", meaning: "OK" })}>
+              <button type="button" className="btn" onClick={() => setDraft({ id: null, option: "", meaning: "INTEREST" })}>
                 Abbrechen
               </button>
             )}

@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { actionOfKey, bearerOf } from "@/lib/server/apiKeys";
 import { requireUser } from "@/lib/server/auth";
 import { toFeedbackView } from "@/lib/server/customerJourneys";
 import { collections } from "@/lib/server/db";
@@ -7,7 +8,9 @@ import { customerFeedbackInput } from "@/lib/server/schemas";
 
 // Customer feedback on a KundenJourney step (relation customerFeedback).
 // GET  /api/customer-journeys/ID/steps/SID/feedbacks – oldest first (editors)
-// POST /api/customer-journeys/ID/steps/SID/feedbacks { feedback, feedbackComment?, feedbackRating? 1–5 | null } (editors)
+// POST /api/customer-journeys/ID/steps/SID/feedbacks { feedback, feedbackComment?, feedbackRating? 1–5 | null }
+//      editors (session) – or the system carrying out the step's action with that
+//      action's API key: `Authorization: Bearer nxm_…` (Admin → Aktionen)
 
 type Ctx = { params: Promise<{ id: string; stepId: string }> };
 
@@ -28,8 +31,15 @@ export const GET = route(async (_req: Request, ctx: Ctx) => {
 });
 
 export const POST = route(async (req: Request, ctx: Ctx) => {
-  const user = await requireUser();
+  const key = bearerOf(req);
+  let createdBy: string;
+  const keyAction = key ? await actionOfKey(key) : null;
+  if (!keyAction) createdBy = (await requireUser())._id;
+  else createdBy = `action:${keyAction._id.toHexString()}`;
   const step = await requireStep(ctx);
+  if (keyAction && !step.actionId.equals(keyAction._id)) {
+    throw new HttpError(403, `Der API-Schlüssel gehört zur Aktion «${keyAction.name}» – dieser Schritt hat eine andere Aktion`);
+  }
   const input = await readJson(req, customerFeedbackInput);
   const now = new Date();
   const doc = {
@@ -38,7 +48,7 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     customerJourneyId: step.customerJourneyId,
     customerId: step.customerId,
     ...input,
-    createdBy: user._id,
+    createdBy,
     createdAt: now,
     updatedAt: now,
   };

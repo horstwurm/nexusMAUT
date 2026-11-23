@@ -9,13 +9,24 @@ import { AttributesModal } from "./TypeAttributesModal";
 type Draft = { id: string | null; name: string; description: string; url: string };
 const EMPTY: Draft = { id: null, name: "", description: "", url: "" };
 
-/** Admin card for the actions (Aktionen): name + description. */
+/** Admin card for the actions (Aktionen): name, description, URL, attributes and the API key for the feedback API. */
 export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
   const [list, setList] = useState(initial);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attributesOf, setAttributesOf] = useState<ActionView | null>(null);
+  /** a key just created – shown once */
+  const [newKey, setNewKey] = useState<{ action: string; key: string; copied: boolean } | null>(null);
+
+  async function createKey(a: ActionView) {
+    if (a.apiKey && !window.confirm(`Neuen API-Schlüssel für «${a.name}» erzeugen? Der bisherige (${a.apiKey.hint}) funktioniert danach nicht mehr.`)) return;
+    setNewKey(null);
+    await act(async () => {
+      const { key } = await api<{ key: string }>(`/api/actions/${a.id}/api-key`, { method: "POST" });
+      setNewKey({ action: a.name, key, copied: false });
+    });
+  }
 
   async function act(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -37,8 +48,39 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
       <h2>
         Aktionen <span className="count-badge">{list.length}</span>
       </h2>
-      <p className="small muted">Was mit Kunden geschehen kann, z.B. «Beratungstermin anbieten» oder «Willkommensmail senden».</p>
+      <p className="small muted">
+        Was mit Kunden geschehen kann, z.B. «Beratungstermin anbieten» oder «Willkommensmail senden». Das System, das eine Aktion ausführt, meldet
+        das Feedback der Kunden mit dem API-Schlüssel der Aktion zurück (KundenJourneys → Schritt → «API»).
+      </p>
       <Notice kind="error">{error}</Notice>
+      {newKey && (
+        <div className="notice notice-ok" role="status">
+          <strong>Neuer API-Schlüssel für «{newKey.action}»</strong> – nur jetzt sichtbar, bitte gleich kopieren und im ausführenden System
+          hinterlegen:
+          <div className="row" style={{ marginTop: 8, flexWrap: "nowrap" }}>
+            <code className="mono" style={{ overflowWrap: "anywhere", userSelect: "all" }}>
+              {newKey.key}
+            </code>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(newKey.key);
+                  setNewKey({ ...newKey, copied: true });
+                } catch {
+                  /* select the text by hand */
+                }
+              }}
+            >
+              {newKey.copied ? "Kopiert ✓" : "Kopieren"}
+            </button>
+            <button type="button" className="btn btn-sm" onClick={() => setNewKey(null)}>
+              Ausblenden
+            </button>
+          </div>
+        </div>
+      )}
 
       {list.length === 0 ? (
         <p className="empty">Noch keine Aktionen.</p>
@@ -50,6 +92,7 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
                 <th>Name</th>
                 <th>Beschreibung</th>
                 <th>URL</th>
+                <th>API-Schlüssel</th>
                 <th>Geändert</th>
                 <th />
               </tr>
@@ -71,6 +114,35 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
                     ) : (
                       <span className="muted">–</span>
                     )}
+                  </td>
+                  <td className="small" style={{ whiteSpace: "nowrap" }}>
+                    {a.apiKey ? (
+                      <>
+                        <code className="mono">{a.apiKey.hint}</code>
+                        <div className="muted">
+                          erzeugt {formatDate(a.apiKey.createdAt)} · {a.apiKey.lastUsedAt ? `zuletzt benutzt ${formatDate(a.apiKey.lastUsedAt, true)}` : "noch nie benutzt"}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="muted">keiner</span>
+                    )}
+                    <div className="row" style={{ gap: 4, marginTop: 4, flexWrap: "nowrap" }}>
+                      <button className="btn btn-sm" disabled={busy} onClick={() => createKey(a)}>
+                        {a.apiKey ? "Neu erzeugen" : "Erzeugen"}
+                      </button>
+                      {a.apiKey && (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          disabled={busy}
+                          onClick={() => {
+                            if (window.confirm(`API-Schlüssel ${a.apiKey!.hint} von «${a.name}» widerrufen? Systeme, die ihn benutzen, können danach kein Feedback mehr setzen.`))
+                              act(() => api(`/api/actions/${a.id}/api-key`, { method: "DELETE" }));
+                          }}
+                        >
+                          Widerrufen
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td>{formatDate(a.updatedAt)}</td>
                   <td>

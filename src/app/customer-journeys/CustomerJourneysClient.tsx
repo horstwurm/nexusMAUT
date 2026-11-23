@@ -6,7 +6,9 @@ import { Notice } from "@/components/Notice";
 import { StepPreviewResult, type Preview } from "@/app/journeys/StepTestModal";
 import { api, errorText, formatDate } from "@/lib/client";
 import { MeaningBadge } from "@/app/journeys/FeedbackOptionsModal";
+import { ExecuteModal } from "./ExecuteModal";
 import { FeedbackApiModal } from "./FeedbackApiModal";
+import { STEP_STATUSES, STEP_STATUS_INFO, type StepStatus } from "@/lib/stepStatus";
 import type { Customer, CustomerFeedbackView, CustomerJourneyStatus, CustomerJourneyStepView, CustomerJourneyView, DataStatus } from "@/lib/types";
 
 type JourneyOption = { id: string; name: string; description: string; stepCount: number };
@@ -18,11 +20,6 @@ const STATUS: Record<CustomerJourneyStatus, { label: string; badge: string }> = 
   active: { label: "aktiv", badge: "badge-accent" },
   done: { label: "abgeschlossen", badge: "badge-ok" },
   cancelled: { label: "abgebrochen", badge: "" },
-};
-const STEP_STATUS: Record<CustomerJourneyStepView["status"], { label: string; badge: string }> = {
-  open: { label: "offen", badge: "" },
-  done: { label: "erledigt", badge: "badge-ok" },
-  skipped: { label: "übersprungen", badge: "badge-warn" },
 };
 const DATA_STATUS: Record<DataStatus, { label: string; badge: string }> = {
   unchecked: { label: "nicht geprüft", badge: "" },
@@ -98,6 +95,7 @@ function JourneyRuns({ journey, rules, onCountsChanged }: { journey: JourneyOpti
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [executing, setExecuting] = useState(false);
   // bumped after «Daten prüfen» so opened step lists reload
   const [checkVersion, setCheckVersion] = useState(0);
 
@@ -198,7 +196,28 @@ function JourneyRuns({ journey, rules, onCountsChanged }: { journey: JourneyOpti
           >
             {checking ? "Prüfe Daten …" : "Daten prüfen"}
           </button>
+          <button
+            className="btn btn-danger-solid"
+            disabled={checking}
+            title="Schritte «Bereit zur Ausführung» aller aktiven KundenJourneys dieser Journey an die URL ihrer Aktion senden – mit Bestätigung"
+            onClick={() => setExecuting(true)}
+          >
+            Ausführen
+          </button>
         </div>
+        {executing && (
+          <ExecuteModal
+            journeyId={journey.id}
+            journeyName={journey.name}
+            onClose={async (changed) => {
+              setExecuting(false);
+              if (changed) {
+                setCheckVersion((v) => v + 1);
+                await Promise.all([load(), onCountsChanged()]);
+              }
+            }}
+          />
+        )}
 
         {list && list.length === 0 ? (
           <p className="empty">Keine KundenJourneys{filter.status || filter.q ? " für diesen Filter" : ""}.</p>
@@ -294,7 +313,7 @@ function Progress({ p }: { p: CustomerJourneyView["progress"] }) {
   const finished = p.done + p.skipped;
   const pct = p.total ? Math.round((finished / p.total) * 100) : 0;
   return (
-    <div title={`${p.done} erledigt, ${p.skipped} übersprungen, ${p.total - finished} offen`}>
+    <div title={`${p.done} erledigt, ${p.skipped} übersprungen, ${p.total - finished} offen (Vorschlag, bereit oder ausgesetzt)`}>
       <div className="small">
         {finished} / {p.total}
       </div>
@@ -511,9 +530,33 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
                 <td style={{ whiteSpace: "nowrap" }}>
                   <strong>{s.actionName}</strong>
                 </td>
-                <td>
-                  <span className={`badge ${STEP_STATUS[s.status].badge}`}>{STEP_STATUS[s.status].label}</span>
+                <td style={{ minWidth: 190 }}>
+                  <select
+                    className={`step-status ${STEP_STATUS_INFO[s.status].badge}`}
+                    value={s.status}
+                    disabled={!!busy || locked}
+                    aria-label="Status des Schritts"
+                    title={s.status === "done" ? "Erledigt: Inhalt für den Kunden aufbereitet" : "«Erledigt» bereitet den Inhalt für den Kunden auf und speichert ihn"}
+                    onChange={(e) => {
+                      const next = e.target.value as StepStatus;
+                      if (s.status === "done" && !window.confirm("Der für den Kunden aufbereitete Inhalt wird verworfen. Status ändern?")) return;
+                      setStatus(s.id, next);
+                    }}
+                  >
+                    {STEP_STATUSES.map((st) => (
+                      <option key={st} value={st}>
+                        {STEP_STATUS_INFO[st].label}
+                      </option>
+                    ))}
+                  </select>
+                  {busy === s.id && <div className="small muted">speichern …</div>}
                   {s.doneAt && <div className="small muted">{formatDate(s.doneAt, true)}</div>}
+                  {s.execution && (
+                    <div className="small" style={{ color: s.execution.ok ? "var(--muted)" : "var(--danger)", maxWidth: 220 }} title={s.execution.url}>
+                      {s.execution.ok ? "gesendet" : "Senden fehlgeschlagen"} {formatDate(s.execution.at, true)}
+                      {s.execution.error && <div>{s.execution.error}</div>}
+                    </div>
+                  )}
                 </td>
                 <td className="small" style={{ maxWidth: 260 }}>
                   <span className={`badge ${DATA_STATUS[s.dataStatus].badge}`} title={s.dataCheckedAt ? `geprüft ${formatDate(s.dataCheckedAt, true)}` : undefined}>
@@ -566,6 +609,11 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
                   </div>
                 </td>
                 <td className="small" style={{ minWidth: 200, maxWidth: 320 }}>
+                  {s.feedbacks.length === 0 && (
+                    <div style={{ marginBottom: 6 }}>
+                      <span className="badge">Kein Feedback</span>
+                    </div>
+                  )}
                   {s.feedbacks.map((f) => (
                     <div key={f.id} className="feedback">
                       <div className="row" style={{ gap: 6, flexWrap: "nowrap", alignItems: "baseline" }}>
@@ -596,20 +644,6 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
                     <button className="btn btn-sm" onClick={() => setTesting(s)} title="Inhalt für diesen Kunden aufbereiten, ohne den Schritt zu ändern">
                       Testen
                     </button>
-                    {s.status === "open" ? (
-                      <>
-                        <button className="btn btn-sm btn-primary" disabled={!!busy || locked} onClick={() => setStatus(s.id, "done")} title="Inhalt für den Kunden aufbereiten und als erledigt markieren">
-                          {busy === s.id ? "…" : "Erledigt"}
-                        </button>
-                        <button className="btn btn-sm" disabled={!!busy || locked} onClick={() => setStatus(s.id, "skipped")}>
-                          Überspringen
-                        </button>
-                      </>
-                    ) : (
-                      <button className="btn btn-sm" disabled={!!busy || locked} onClick={() => setStatus(s.id, "open")}>
-                        Wieder öffnen
-                      </button>
-                    )}
                   </div>
                 </td>
               </tr>

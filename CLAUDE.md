@@ -2,8 +2,12 @@
 
 Marketing automation for the nexus apps: customers (Kunden) with products,
 positions and transactions, customer attributes, rules (customer segments),
-journeys with steps (actions + content with placeholders) and services that
-are called over HTTP. Login via **nexusIdentity** (`../nexusIdentity`, OIDC). One Next.js 16
+journeys with steps (actions + content with placeholders + feedback options),
+KundenJourneys that run customers through them and hand ready steps to the
+action's system («Ausführen»), and services that are called over HTTP. Login
+with the own login (e-mail + password, default) or via **nexusIdentity**
+(`../nexusIdentity`, OIDC) – Admin → Anmeldung. Live: https://nexus-maut.vercel.app
+(Vercel project `nexus-maut`, pushes to `main` deploy). One Next.js 16
 app (App Router, TypeScript, React 19) with its own MongoDB database. UI text
 is German («Du»), code, comments and commits are English. Same stack and
 conventions as `../nexusIdentity` and `../nexusAd`.
@@ -16,7 +20,7 @@ conventions as `../nexusIdentity` and `../nexusAd`.
 npm run dev -- -p 3006   # dev server (reads .env.local); 3005 = nexusIdentity, 3000/3001/3004 other apps
 npm run lint
 npm run typecheck        # next typegen && tsc --noEmit
-npm test                 # vitest: templates, CSV import, return URLs, birth dates
+npm test                 # vitest: templates, rules, service calls, return URLs, birth dates
 npm run build
 npm run admin:grant -- someone@example.ch   # fallback: make a logged-in user admin
 npm run auth:mode -- nexusIdentity|local    # emergency switch of the login mode (Admin → Anmeldung)
@@ -45,7 +49,12 @@ smoke tests write is live immediately, and settings stored in the DB (e.g. the
 login mode in Admin → Anmeldung) apply to production too. So: ask before
 creating test users / test data there (and remove them afterwards), ask before
 `npm run sample:create` / `sample:remove` / `auth:mode`; run smoke tests against
-the local MongoDB instead (`~/mongodb`, port 27019, a throw-away database).
+the local MongoDB instead (`~/mongodb`, port 27019, a throw-away database –
+e.g. a copy of the app without `.env*` on port 3016 with `MONGODB_URI` /
+`MONGODB_DB` / `APP_URL` set in the environment, so the dev server on 3006
+keeps running). Schema changes with a conversion in `init` (e.g.
+`convertOpenSteps`) run against production as soon as the dev server reloads
+`db.ts` – deploy right after, or the live app sees data it doesn't know.
 Never print `.env.local` values – the URI contains the Atlas password.
 If a new route sees `undefined` for a new collection or schema after edits,
 or a changed validation still behaves the old way (Turbopack kept a stale
@@ -227,7 +236,11 @@ All pages use the full window width (`.page`, 24px side padding).
   **Feedback options** (relation `journeyStepFeedbackOptions`, collection of
   that name, `src/lib/feedbackOptions.ts`): the answers a customer can give to
   a step – `option` (text, ≤ 200, unique per step, case-insensitive) +
-  `meaning` (fixed: `OK` | `WARN` | `NOK`, badges OK / Warnung / Nicht OK),
+  `meaning` (fixed codes, labels as badges: `LEAD` Lead, `CHANCE` Chance,
+  `INTEREST` Interesse, `INDIFFERENT` Indifferent, `NO_INTEREST_NOW` Kein
+  Interesse aktuell, `NO_INTEREST` Kein Interesse; until 2026-11-23 OK / WARN /
+  NOK – `init` converts them once: OK → INTEREST, WARN → INDIFFERENT, NOK →
+  NO_INTEREST, `convertFeedbackMeanings`),
   ordered by `sort`; `journeyId` denormalised. API
   `/api/journeys/ID/steps/SID/feedback-options[/OID]` (GET editors; POST,
   PUT, PATCH {sort}, DELETE admins); the step list carries `feedbackOptions`.
@@ -237,10 +250,28 @@ All pages use the full window width (`.page`, 24px side padding).
   `toStepViews`, read live – not copied at assignment; column
   «Feedback-Optionen» before «Feedback»). Not yet selectable when recording a
   customer feedback. «API» in that column → `FeedbackApiModal`
-  (src/app/customer-journeys/): the POST request to
-  `…/customer-journeys/ID/steps/SID/feedbacks` for this step as HTTP and curl
-  (copy buttons, an option picked into the example body). The API needs a
-  session cookie (editors) – no API keys for other systems yet.
+  (src/app/customer-journeys/), two columns, each as HTTP and curl with copy
+  buttons: **1 · Aktion aufrufen** – POST to the action's `url` with the step
+  as JSON (`POST …/customer-journeys/ID/steps/SID/action-request`, editors,
+  changes and sends nothing: `{ action: { name, url }, contentSource, body }`;
+  body = ids, journey, action, customer { id, vorname, nachname }, `content`
+  (done: stored; otherwise the template rendered now, services called),
+  `unfilled`, `feedbackOptions`, `feedbackUrl`); **2 · Feedback setzen** – the
+  POST to `…/steps/SID/feedbacks` (an option picked into the example body).
+  **Ausführen** (red button next to «Daten prüfen», `ExecuteModal`, editors;
+  `src/lib/server/execute.ts`): `GET /api/customer-journeys/execute?journeyId`
+  = what would be sent (steps `ready` of the journey's active runs, per action,
+  without URL, known data errors) → dialog «n Schritte werden ausgeführt» with
+  «Senden» / «Abbrechen»; `POST … { journeyId }` renders each ready step
+  (`previewStep`, services once per customer) and POSTs `actionPayload` (the
+  same JSON as in «API») to the action's URL – 10 s timeout, no redirects, 4 in
+  parallel, new sends stop after 40 s (`remaining` → press again). 2xx → step
+  `done` (content kept, like «Erledigt»); error → stays `ready`; both noted in
+  `execution { at, ok, url, httpStatus, error, by }` (shown under the status).
+  Missing data (placeholder without value, service error) → not sent, marked
+  «Datenfehler»; action without URL → not sent. The feedback POST accepts a session
+  (editors) or the **API key of the step's action** (`Authorization: Bearer
+  nxm_…`; another action's key → 403; `createdBy: "action:<id>"`).
   Customers run through journeys as KundenJourneys (below).
   The template model was called customerJourney (collection
   `customerJourneys`) until 2026-11 and was renamed then; the name now
@@ -324,7 +355,12 @@ All pages use the full window width (`.page`, 24px side padding).
   (GET editors; POST, PUT, PATCH {sort}, DELETE admins), «Attribute (n)» per
   action → `AttributesModal`; deleted with the action. Only definitions so
   far – nothing stores action attribute values, actions aren't linked to
-  rules yet.
+  rules yet. **API key** per action (`actions.apiKey { hash, hint, createdAt,
+  createdBy, lastUsedAt }`, `src/lib/server/apiKeys.ts`): for the system that
+  carries out the action, only for the feedback API of KundenJourney steps
+  with this action. `nxm_` + 32 random bytes, only sha256 + hint (`nxm_…abcd`)
+  stored, shown once; `POST /api/actions/ID/api-key` creates / replaces,
+  `DELETE` revokes (admins); Admin → Aktionen column «API-Schlüssel».
 - **Rules** (UI «Kunden Selektionen» / «Selektion», was «Regeln»; code,
   route `/rules` and collection `rules` keep the old name; `src/lib/rules.ts` pure + tested,
   `src/lib/server/rules.ts`): customer segments. A rule = `match` all | any
@@ -405,9 +441,13 @@ All pages use the full window width (`.page`, 24px side padding).
   `source` keeps which) creates a run per customer and **copies** the
   template steps (`template` = content at assignment; later template edits
   don't change running journeys). One **active** run per customer and journey
-  (partial unique index); others are skipped. Step status open / done /
-  skipped; «done» renders the content for the customer via `previewStep`
-  (placeholders, services) and keeps it with `unfilled` placeholders. Run
+  (partial unique index); others are skipped. Step status
+  (`src/lib/stepStatus.ts`, dropdown per step): unfinished `proposal`
+  Vorschlag (new steps) | `ready` Bereit zur Ausführung | `suspended` Ausgesetzt,
+  finished `done` Erledigt | `skipped` Übersprungen (until 2026-11-23 «open» –
+  `init` converts it to `proposal` once, `convertOpenSteps`); «done» renders
+  the content for the customer via `previewStep` (placeholders, services) and
+  keeps it with `unfilled` placeholders, any other status drops it. Run
   status follows the steps: all finished → done, reopened → active; cancelled
   runs are locked until reactivated. API `/api/customer-journeys[/ID]`
   (GET ?journeyId&status&customerId&q, POST assign, PATCH {status}, DELETE)
@@ -419,7 +459,7 @@ All pages use the full window width (`.page`, 24px side padding).
   active / total), the selected one (`?journey=ID`) on the right with
   «Kunden zuweisen» and its runs.
   **Data check** («Daten prüfen» on the page, `POST /api/customer-journeys/check
-  { journeyId | customerJourneyId }`, `checkData`): renders the **open** steps
+  { journeyId | customerJourneyId }`, `checkData`): renders the **unfinished** steps (Vorschlag, bereit, ausgesetzt)
   of the active runs for their customer and sets the step's `dataStatus`
   (unchecked | ok | error = «Datenfehler») with `dataProblems` (placeholders
   without a value, service errors; sample data counts as ok). Services are
@@ -437,4 +477,5 @@ All pages use the full window width (`.page`, 24px side padding).
 List results in rules, actions linked to rules, automatic step execution
 (KundenJourney steps are marked done by hand), KundenJourneys on the
 customer detail page, choosing a feedback option when recording a customer
-feedback, API keys for other systems (the API only accepts a session cookie).
+feedback, sending without a click (scheduled «Ausführen»), signing the
+requests to action URLs, API keys for anything but setting feedback.

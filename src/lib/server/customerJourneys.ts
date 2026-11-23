@@ -2,6 +2,7 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import type { CustomerFeedbackView, CustomerJourneyStepView, CustomerJourneyView } from "@/lib/types";
 import { collections, type CustomerFeedbackDoc, type CustomerJourneyDoc, type CustomerJourneyStepDoc } from "./db";
+import { isOpenStep, OPEN_STEP_STATUSES } from "@/lib/stepStatus";
 import { toFeedbackOption } from "./journeys";
 import { HttpError } from "./http";
 import { loadRuleDataset, matchingCustomers } from "./rules";
@@ -83,6 +84,9 @@ export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<Custo
     dataCheckedAt: s.dataCheckedAt?.toISOString() ?? null,
     feedbacks: feedbacks.filter((f) => f.customerJourneyStepId.equals(s._id)).map(toFeedbackView),
     feedbackOptions: options.filter((o) => o.stepId.equals(s.stepId)).map(toFeedbackOption),
+    execution: s.execution
+      ? { at: s.execution.at.toISOString(), ok: s.execution.ok, url: s.execution.url, httpStatus: s.execution.httpStatus ?? null, error: s.execution.error ?? null }
+      : null,
   }));
 }
 
@@ -146,7 +150,7 @@ export async function assignJourney(p: { journeyId: ObjectId; customerIds?: Obje
         actionId: s.actionId,
         template: s.content ?? "",
         sort: s.sort,
-        status: "open" as const,
+        status: "proposal" as const,
         content: null,
         unfilled: [],
         doneAt: null,
@@ -162,7 +166,7 @@ export async function assignJourney(p: { journeyId: ObjectId; customerIds?: Obje
   return { created, skipped: customerIds.length - created, matched: customerIds.length };
 }
 
-/** Sets a step's status; «done» renders the content for the customer. Then updates the run's status. */
+/** Sets a step's status; «done» renders the content for the customer (other statuses drop it). Then updates the run's status. */
 export async function setStepStatus(runId: ObjectId, stepId: ObjectId, status: CustomerJourneyStepDoc["status"], note?: string) {
   const c = await collections();
   const run = await c.customerJourneys.findOne({ _id: runId });
@@ -172,7 +176,7 @@ export async function setStepStatus(runId: ObjectId, stepId: ObjectId, status: C
   if (!step) throw new HttpError(404, "Schritt nicht gefunden");
   // reopening a step of a finished run makes it active again – not possible while
   // the customer already runs the same journey again
-  if (run.status === "done" && status === "open") {
+  if (run.status === "done" && isOpenStep(status)) {
     const again = await c.customerJourneys.findOne({ customerId: run.customerId, journeyId: run.journeyId, status: "active" });
     if (again) throw new HttpError(409, "Der Kunde hat diese Journey bereits wieder aktiv");
   }
@@ -200,7 +204,7 @@ export async function updateRunStatus(runId: ObjectId) {
   const run = await c.customerJourneys.findOne({ _id: runId });
   if (!run || run.status === "cancelled") return;
   const steps = await c.customerJourneySteps.find({ customerJourneyId: runId }, { projection: { status: 1 } }).toArray();
-  const finished = steps.length > 0 && steps.every((s) => s.status !== "open");
+  const finished = steps.length > 0 && steps.every((s) => !isOpenStep(s.status));
   const now = new Date();
   if (finished && run.status !== "done") {
     await c.customerJourneys.updateOne({ _id: runId }, { $set: { status: "done", completedAt: now, updatedAt: now } });
@@ -234,7 +238,7 @@ export async function journeyRunCounts(): Promise<JourneyRunCounts[]> {
 }
 
 /** dataStatus from a rendered step: placeholders without a value and service errors are data problems. */
-function dataResult(preview: StepPreview, at: Date): Pick<CustomerJourneyStepDoc, "dataStatus" | "dataProblems" | "dataCheckedAt"> {
+export function dataResult(preview: StepPreview, at: Date): Pick<CustomerJourneyStepDoc, "dataStatus" | "dataProblems" | "dataCheckedAt"> {
   const problems = [
     ...preview.segments.flatMap((s) => (s.kind === "placeholder" && s.value === null ? [`${s.token}: ${s.note ?? "kein Wert"}`] : [])),
     ...preview.services.flatMap((r) => (r.status === "error" ? [`Service «${r.name}»: ${r.message ?? "Fehler"}`] : [])),
@@ -253,7 +257,7 @@ export async function checkData(p: { journeyId?: ObjectId; customerJourneyId?: O
     .find(p.customerJourneyId ? { _id: p.customerJourneyId } : { journeyId: p.journeyId, status: "active" }, { projection: { customerId: 1, status: 1 } })
     .toArray();
   if (p.customerJourneyId && !runs.length) throw new HttpError(404, "KundenJourney nicht gefunden");
-  const steps = await c.customerJourneySteps.find({ customerJourneyId: { $in: runs.map((r) => r._id) }, status: "open" }).toArray();
+  const steps = await c.customerJourneySteps.find({ customerJourneyId: { $in: runs.map((r) => r._id) }, status: { $in: [...OPEN_STEP_STATUSES] } }).toArray();
   const customerOf = new Map(runs.map((r) => [r._id.toHexString(), r.customerId]));
   const cache: ServiceCache = new Map();
   const now = new Date();
