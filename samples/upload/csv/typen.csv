@@ -1,0 +1,46 @@
+﻿typ;bezeichnung;ebene;attribut;attributtyp;optionen
+konto;Privatkonto;Position;IBAN;alpha;
+konto;Privatkonto;Position;Saldo;num;
+konto;Privatkonto;Position;Eröffnet am;date;
+konto;Privatkonto;Transaktion;Datum;date;
+konto;Privatkonto;Transaktion;Buchungstext;alpha;
+konto;Privatkonto;Transaktion;Betrag;num;
+sparkonto;Sparkonto;Position;IBAN;alpha;
+sparkonto;Sparkonto;Position;Zinssatz %;num;
+sparkonto;Sparkonto;Position;Eröffnet am;date;
+sparkonto;Sparkonto;Transaktion;Datum;date;
+sparkonto;Sparkonto;Transaktion;Art;list;Einzahlung|Auszahlung|Zins
+sparkonto;Sparkonto;Transaktion;Betrag;num;
+kreditkarte;Kreditkarte;Position;Kartennummer;alpha;
+kreditkarte;Kreditkarte;Position;Kartentyp;list;Classic|Gold|Platinum
+kreditkarte;Kreditkarte;Position;Limite;num;
+kreditkarte;Kreditkarte;Position;Gültig bis;date;
+kreditkarte;Kreditkarte;Position;Kontaktlos;bool;
+kreditkarte;Kreditkarte;Transaktion;Datum;date;
+kreditkarte;Kreditkarte;Transaktion;Händler;alpha;
+kreditkarte;Kreditkarte;Transaktion;Kategorie;list;Lebensmittel|Restaurant|Reisen|Online|Tankstelle|Freizeit
+kreditkarte;Kreditkarte;Transaktion;Betrag;num;
+depot;Wertschriftendepot;Position;Depotnummer;alpha;
+depot;Wertschriftendepot;Position;Depotwert;num;
+depot;Wertschriftendepot;Position;Strategie;list;Einkommen|Ausgewogen|Wachstum
+depot;Wertschriftendepot;Transaktion;Datum;date;
+depot;Wertschriftendepot;Transaktion;Titel;alpha;
+depot;Wertschriftendepot;Transaktion;Betrag;num;
+hypothek;Hypothek;Position;Betrag;num;
+hypothek;Hypothek;Position;Zinssatz %;num;
+hypothek;Hypothek;Position;Laufzeit bis;date;
+hypothek;Hypothek;Transaktion;Datum;date;
+hypothek;Hypothek;Transaktion;Zins;num;
+versicherung;Versicherung;Position;Policennummer;alpha;
+versicherung;Versicherung;Position;Deckung;list;Basis|Komfort|Premium
+versicherung;Versicherung;Position;Jahresprämie;num;
+versicherung;Versicherung;Position;Beginn;date;
+versicherung;Versicherung;Transaktion;Fällig am;date;
+versicherung;Versicherung;Transaktion;Prämie;num;
+versicherung;Versicherung;Transaktion;Status;list;Bezahlt|Offen|Gemahnt
+beratung;Beratung;Position;Thema;list;Vorsorge|Finanzierung|Anlage|Steuern|Nachfolge
+beratung;Beratung;Position;Berater;alpha;
+beratung;Beratung;Transaktion;Termin;date;
+beratung;Beratung;Transaktion;Dauer Minuten;num;
+beratung;Beratung;Transaktion;Erledigt;bool;
+beratung;Beratung;Transaktion;Notiz;alpha;

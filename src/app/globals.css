@@ -84,7 +84,7 @@ pre code { border: 0; padding: 0; background: none; }
 .page-wide { max-width: none; }
 /* Administration: the full window width (side padding stays) */
 .page-full { max-width: none; padding-left: 24px; padding-right: 24px; }
-.auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 32px 16px; }
+.auth-wrap { min-height: calc(100vh - 70px); display: grid; place-items: center; padding: 32px 16px; }
 .auth-card {
   width: 100%; max-width: 420px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
@@ -261,6 +261,11 @@ mark.ph-missing { background: var(--danger-bg); color: var(--danger); border-rad
 
 /* Left navigation + content (KundenJourneys) */
 .side-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; align-items: start; }
+.side-col { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.side-col .side-nav { position: static; max-height: none; overflow: visible; }
+.event-facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 12px 0; }
+.event-facts dt { color: var(--muted); }
+.event-facts dd { margin: 0; }
 .side-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; max-height: calc(100vh - 32px); overflow-y: auto; }
 .side-nav-head { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 4px 8px 8px; }
 .side-nav-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; border-radius: 8px; padding: 8px 10px; color: var(--text); font: inherit; cursor: pointer; }
@@ -271,6 +276,7 @@ mark.ph-missing { background: var(--danger-bg); color: var(--danger); border-rad
 @media (max-width: 800px) {
   .side-layout { grid-template-columns: 1fr; }
   .side-nav { position: static; max-height: none; }
+  .side-col { position: static; max-height: none; }
 }
 
 /* KundenJourney step feedback */
@@ -402,7 +408,6 @@ mark.ph-missing { background: var(--danger-bg); color: var(--danger); border-rad
 .hp-security { list-style: none; margin: 36px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
 .hp-security li { display: flex; gap: 14px; padding-top: 18px; border-top: 1px solid var(--border); }
 .hp-cta { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding-top: 72px; padding-bottom: 72px; }
-.hp-footer { padding-top: 24px; padding-bottom: 32px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
 
 /* start page (logged in) */
 .hp-app { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; padding-top: 8px; }
@@ -458,3 +463,42 @@ mark.ph-missing { background: var(--danger-bg); color: var(--danger); border-rad
   .hp-window-body { overflow-x: auto; }
 }
 .hp-section > .hp-title + .hp-lead { margin-top: 14px; }
+
+/* footer on every page (root layout): © + Impressum / Datenschutz */
+.site-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 20px 24px 28px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+.site-footer nav { display: flex; gap: 20px; }
+.site-footer a { color: var(--muted); }
+.site-footer a:hover { color: var(--text); }
+
+/* Impressum and Datenschutz (/impressum) */
+.legal { max-width: 820px; font-size: 15px; line-height: 1.6; }
+.legal h1 { margin: 4px 0 18px; }
+.legal h2 { margin: 4px 0 18px; font-size: 26px; }
+.legal-eyebrow { margin: 0; color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+.legal-section { margin-bottom: 26px; }
+.legal-section h3 { font-size: 16px; margin: 0 0 8px; }
+.legal-section p { margin: 0 0 10px; }
+.legal-section ul { margin: 0 0 10px; padding-left: 20px; }
+.legal-section li { margin-bottom: 8px; }
+.legal-break { margin-top: 44px; padding-top: 32px; border-top: 1px solid var(--border); scroll-margin-top: 20px; }
+
+/* Admin → Data Management: Initial Upload | Delta Upload */
+.data-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 8px; }
+.data-column { border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; background: var(--bg); min-width: 0; }
+.data-column .row { color: var(--accent); }
+.data-column h3 { color: var(--text); font-size: 17px; }
+@media (max-width: 800px) { .data-columns { grid-template-columns: 1fr; } }
+.upload-files { list-style: none; margin: -6px 0 12px; padding: 0; display: grid; gap: 2px; }
+.upload-report { margin-top: 14px; }
+.upload-counts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 4px; }
+.upload-counts > div { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.upload-counts strong { font-size: 22px; }
+.upload-errors { border: 1px solid var(--danger); border-radius: 10px; padding: 10px 14px; color: var(--danger); background: var(--surface); max-height: 320px; overflow: auto; }
+.upload-errors ul { margin: 6px 0 0; padding-left: 18px; }
+@media (max-width: 560px) { .upload-counts { grid-template-columns: repeat(2, 1fr); } }
+.upload-progress { margin-top: 14px; display: grid; gap: 6px; }
+.upload-progress-track { height: 10px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.upload-progress-bar { height: 100%; border-radius: 99px; background: var(--danger); transition: width .3s ease; }
+@media (prefers-reduced-motion: reduce) { .upload-progress-bar { transition: none; } }
+.upload-list { margin: -4px 0 14px 52px; }
+@media (max-width: 560px) { .upload-list { margin-left: 0; } }

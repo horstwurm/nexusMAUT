@@ -1,5 +1,6 @@
 "use client";
 
+import { SourceCells, SourceHeaders } from "./SourceColumns";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
@@ -101,6 +102,7 @@ export function Transactions({
                 {defs.map((d) => (
                   <AttrHeader key={d.id} def={d} />
                 ))}
+                <SourceHeaders />
                 <th />
               </tr>
             </thead>
@@ -111,6 +113,7 @@ export function Transactions({
                   {defs.map((d) => (
                     <AttrCell key={d.id} def={d} value={t.values[d.id]} fetched={t.serviceFetched} />
                   ))}
+                  <SourceCells source={t.uploadSource} name={t.uploadName} date={t.uploadDate} />
                   <td>
                     <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: 4 }}>
                       <button className="btn btn-sm" disabled={busy || i === 0} onClick={() => move(i, -1)} aria-label="Nach oben">

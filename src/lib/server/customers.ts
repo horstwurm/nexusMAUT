@@ -19,6 +19,9 @@ export const toCustomer = (c: CustomerDoc): Customer => ({
   dateOfBirth: dayFromDb(c.dateOfBirth),
   attributes: c.attributes ?? {},
   ...(c.serviceFetched && { serviceFetched: fetchedView(c.serviceFetched) }),
+  uploadSource: c.uploadSource ?? null,
+  uploadName: c.uploadName ?? null,
+  uploadDate: c.uploadDate?.toISOString() ?? null,
   createdAt: c.createdAt.toISOString(),
   updatedAt: c.updatedAt.toISOString(),
 });
@@ -53,6 +56,9 @@ export const toCustomerPosition = (p: CustomerPositionDoc): CustomerPosition => 
   productServiceType: p.productServiceType,
   values: p.values,
   ...(p.serviceFetched && { serviceFetched: fetchedView(p.serviceFetched) }),
+  uploadSource: p.uploadSource ?? null,
+  uploadName: p.uploadName ?? null,
+  uploadDate: p.uploadDate?.toISOString() ?? null,
   sort: p.sort,
   updatedAt: p.updatedAt.toISOString(),
 });
@@ -62,6 +68,9 @@ export const toPositionTransaction = (t: PositionTransactionDoc): PositionTransa
   positionId: t.positionId.toHexString(),
   values: t.values,
   ...(t.serviceFetched && { serviceFetched: fetchedView(t.serviceFetched) }),
+  uploadSource: t.uploadSource ?? null,
+  uploadName: t.uploadName ?? null,
+  uploadDate: t.uploadDate?.toISOString() ?? null,
   sort: t.sort,
   updatedAt: t.updatedAt.toISOString(),
 });
@@ -106,4 +115,14 @@ export async function attributeDefsOf(typeCode: string, kind: AttributeKind = "p
   const type = await domainValues.findOne({ domain: "productServiceType", code: typeCode });
   if (!type) return [];
   return toAttributeDefs(await typeAttributesOf(type._id, kind));
+}
+
+/**
+ * Ids of up to `n` randomly chosen customers – the customer numbers a «Mock»
+ * service answers with (`randomResponse`). Empty without customers.
+ */
+export async function sampleCustomerNumbers(n = 25) {
+  const { customers } = await collections();
+  const rows = await customers.aggregate<{ _id: ObjectId }>([{ $sample: { size: n } }, { $project: { _id: 1 } }]).toArray();
+  return rows.map((r) => r._id.toHexString());
 }

@@ -181,7 +181,7 @@ export function ServiceCallModal({ service, onClose }: { service: ServiceView; o
   );
 }
 
-function prettyJson(text: string) {
+export function prettyJson(text: string) {
   try {
     return JSON.stringify(JSON.parse(text), null, 2);
   } catch {
@@ -190,7 +190,7 @@ function prettyJson(text: string) {
 }
 
 /** The GET attributes with their values and status; `sample` marks sample data. */
-function MappedTable({ rows, sample }: { rows: MappedValue[]; sample?: boolean }) {
+export function MappedTable({ rows, sample }: { rows: MappedValue[]; sample?: boolean }) {
   if (!rows.length) return <p className="small muted">Keine GET-Attribute definiert.</p>;
   return (
     <div className="table-wrap">

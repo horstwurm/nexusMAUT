@@ -29,11 +29,12 @@ export async function callService(
   putDefs: AttributeDef[],
   getDefs: ServiceAttrDef[],
   values: Record<string, PositionValue>,
-  opts: { mock?: boolean } = {},
+  /** customerNumbers: ids of real customers for «Kundennummer» attributes of a mock answer */
+  opts: { mock?: boolean; customerNumbers?: string[] } = {},
 ): Promise<CallResult> {
   if (opts.mock) {
     // «Mock» switched on: no HTTP call, a random answer mapped like a real one
-    const json = randomResponse(getDefs);
+    const json = randomResponse(getDefs, undefined, undefined, opts.customerNumbers);
     const raw = JSON.stringify(json, null, 2);
     return {
       request: buildRequest(url || "https://mock.invalid/", method, putDefs, values),
@@ -61,7 +62,9 @@ export async function callService(
     });
   } catch (err) {
     const timeout = err instanceof Error && err.name === "TimeoutError";
-    const cause = err instanceof Error ? ((err.cause as Error | undefined)?.message ?? err.message) : String(err);
+    // a refused connection is an AggregateError without a message – fall back to its code (ECONNREFUSED …)
+    const c = err instanceof Error ? (err.cause as (Error & { code?: string }) | undefined) : undefined;
+    const cause = err instanceof Error ? c?.message || c?.code || err.message : String(err);
     return {
       request,
       response: null,

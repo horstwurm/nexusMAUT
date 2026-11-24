@@ -231,20 +231,47 @@ export function randomValue(name: string, type: AttributeType, options: string[]
 /**
  * A random answer (service with «Mock» switched on – it isn't called): one
  * random value per GET attribute, lists 1 – 5 random rows (at their path).
+ * Text attributes named like a customer number («Kundennummer», «KundenNr»,
+ * «KundenId», «customerId» …) get one of `customerNumbers` (ids of real
+ * customers) when given – different ones per list row as far as there are.
  */
-export function randomResponse(getDefs: ServiceAttrDef[], today = new Date().toISOString().slice(0, 10), rnd: () => number = Math.random): Obj {
+export function randomResponse(
+  getDefs: ServiceAttrDef[],
+  today = new Date().toISOString().slice(0, 10),
+  rnd: () => number = Math.random,
+  customerNumbers: string[] = [],
+): Obj {
+  let pool: string[] = [];
+  /** a customer number not used yet in this answer (refilled when all are used) */
+  const nextNumber = () => {
+    if (!pool.length) pool = [...customerNumbers];
+    return pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+  };
+  const value = (name: string, type: AttributeType, options: string[]) =>
+    customerNumbers.length && type === "alpha" && isCustomerNumberAttribute(name) ? nextNumber() : randomValue(name, type, options, today, rnd);
   const out: Obj = {};
   for (const d of getDefs) {
     if (d.list) {
       const rows = Array.from({ length: 1 + Math.floor(rnd() * 5) }, () =>
-        Object.fromEntries(d.list!.columns.map((c) => [c.attribute, randomValue(c.attribute, c.attributeType, c.options, today, rnd)])),
+        Object.fromEntries(d.list!.columns.map((c) => [c.attribute, value(c.attribute, c.attributeType, c.options)])),
       );
       if (d.list.path) setPath(out, d.list.path, rows);
       else out[d.attribute] = rows;
-    } else out[d.attribute] = randomValue(d.attribute, d.attributeType, d.options, today, rnd);
+    } else out[d.attribute] = value(d.attribute, d.attributeType, d.options);
   }
   return out;
 }
+
+const CUSTOMER_NUMBER_NAMES = new Set(["kundennummer", "kundennr", "kundenid", "kundeid", "kunde", "customerid", "customernumber", "customerno", "customer"]);
+
+/** «Kundennummer», «Kunden-Nr.», «KundenId», «customer_id» … (case, spaces and punctuation ignored). */
+export const isCustomerNumberAttribute = (name: string) => CUSTOMER_NUMBER_NAMES.has(name.toLowerCase().replace(/[^a-z]/g, ""));
+
+/** Does a random answer for these GET attributes use customer numbers? */
+export const usesCustomerNumbers = (getDefs: ServiceAttrDef[]) =>
+  getDefs.some((d) =>
+    d.list ? d.list.columns.some((c) => c.attributeType === "alpha" && isCustomerNumberAttribute(c.attribute)) : d.attributeType === "alpha" && isCustomerNumberAttribute(d.attribute),
+  );
 
 /** «Not available»: no answer at all, 404 (endpoint missing) or a server error (5xx). */
 export const isUnavailable = (status: number | null) => status === null || status === 404 || status >= 500;

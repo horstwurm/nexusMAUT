@@ -1,5 +1,6 @@
 "use client";
 
+import { SourceCells, SourceHeaders } from "./SourceColumns";
 import Link from "next/link";
 import { Fragment, useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
@@ -106,7 +107,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
           const defs = attributesByType[code] ?? [];
           const trxDefs = trxAttributesByType[code] ?? [];
           const group = positions.filter((p) => p.productServiceType === code);
-          const cols = defs.length + (defs.length ? 0 : 1) + 3;
+          const cols = defs.length + (defs.length ? 0 : 1) + 5;
           return (
             <div key={code} style={{ marginBottom: 18 }}>
               <h4 style={{ margin: "0 0 6px" }}>
@@ -125,6 +126,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
                         <AttrHeader key={d.id} def={d} />
                       ))}
                       {!defs.length && <th>Werte</th>}
+                      <SourceHeaders />
                       <th />
                     </tr>
                   </thead>
@@ -147,6 +149,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
                             <AttrCell key={d.id} def={d} value={p.values[d.id]} fetched={p.serviceFetched} />
                           ))}
                           {!defs.length && <td className="small muted">Typ ohne Positionsattribute</td>}
+                          <SourceCells source={p.uploadSource} name={p.uploadName} date={p.uploadDate} />
                           <td>
                             <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap", gap: 4 }}>
                               <button className="btn btn-sm" disabled={busy || i === 0} onClick={() => move(group, i, -1)} aria-label="Nach oben">

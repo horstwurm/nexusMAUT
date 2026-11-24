@@ -14,6 +14,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // read Excel uploads on the server (Admin → Data Management) – plain Node package, not bundled
+  serverExternalPackages: ["exceljs"],
   // Dev server only: hosts besides localhost that may load the dev bundles.
   allowedDevOrigins: ["127.0.0.1"],
 };

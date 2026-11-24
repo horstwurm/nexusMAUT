@@ -1,4 +1,5 @@
 import "server-only";
+import { UPDATE_FREQUENCIES } from "@/lib/events";
 import { z } from "zod";
 import { dateOfBirthError } from "@/lib/customers";
 import { CODE_RE, type DomainName } from "@/lib/domains";
@@ -158,6 +159,14 @@ export const actionInput = z.object({
   name: z.string().trim().min(1, "Name fehlt").max(120),
   description: z.string().trim().max(2000).default(""),
   url: optionalUrl,
+});
+
+export const eventInput = z.object({
+  name: z.string().trim().min(1, "Name fehlt").max(120),
+  description: z.string().trim().max(2000).default(""),
+  serviceId: z.string("Trigger-Service wählen").regex(/^[0-9a-f]{24}$/, "Trigger-Service wählen"),
+  updateFrequency: z.enum(UPDATE_FREQUENCIES, "Aktualisierung wählen"),
+  journeyId: z.string("Journey wählen").regex(/^[0-9a-f]{24}$/, "Journey wählen"),
 });
 
 // --- e-mail settings (Admin) ------------------------------------------------------------

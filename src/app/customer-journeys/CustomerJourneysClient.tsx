@@ -6,10 +6,13 @@ import { Notice } from "@/components/Notice";
 import { StepPreviewResult, type Preview } from "@/app/journeys/StepTestModal";
 import { api, errorText, formatDate } from "@/lib/client";
 import { MeaningBadge } from "@/app/journeys/FeedbackOptionsModal";
+import { MappedTable, prettyJson } from "@/app/admin/ServiceCallModal";
 import { ExecuteModal } from "./ExecuteModal";
 import { FeedbackApiModal } from "./FeedbackApiModal";
 import { STEP_STATUSES, STEP_STATUS_INFO, type StepStatus } from "@/lib/stepStatus";
-import type { Customer, CustomerFeedbackView, CustomerJourneyStatus, CustomerJourneyStepView, CustomerJourneyView, DataStatus } from "@/lib/types";
+import { UPDATE_FREQUENCY_LABELS } from "@/lib/events";
+import { nextDueAt } from "@/lib/eventSchedule";
+import type { Customer, CustomerFeedbackView, EventView, CustomerJourneyStatus, CustomerJourneyStepView, CustomerJourneyView, DataStatus } from "@/lib/types";
 
 type JourneyOption = { id: string; name: string; description: string; stepCount: number };
 type RunCounts = { journeyId: string; active: number; done: number; cancelled: number };
@@ -32,20 +35,36 @@ export function CustomerJourneysClient({
   rules,
   initialCounts,
   initialJourneyId,
+  events: initialEvents,
+  initialEventId,
+  eventTimer,
 }: {
   journeys: JourneyOption[];
   rules: RuleOption[];
   initialCounts: RunCounts[];
   initialJourneyId: string | null;
+  events: EventView[];
+  initialEventId: string | null;
+  /** the background timer for trigger services runs (EVENT_TIMER=on) */
+  eventTimer: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(initialJourneyId);
+  /** an event chosen in the «Events» panel – shown instead of the journey */
+  const [eventId, setEventId] = useState<string | null>(initialEventId);
+  const [events, setEvents] = useState(initialEvents);
   const [counts, setCounts] = useState<RunCounts[]>(initialCounts);
   const journey = journeys.find((j) => j.id === selected) ?? null;
+  const event = events.find((e) => e.id === eventId) ?? null;
 
   const select = (id: string) => {
     setSelected(id);
+    setEventId(null);
     // keep the selection in the URL (reload / link)
     window.history.replaceState(null, "", `?journey=${id}`);
+  };
+  const selectEvent = (id: string) => {
+    setEventId(id);
+    window.history.replaceState(null, "", `?event=${id}`);
   };
   const refreshCounts = useCallback(async () => {
     try {
@@ -57,25 +76,50 @@ export function CustomerJourneysClient({
 
   return (
     <div className="side-layout">
-      <nav className="side-nav" aria-label="Journeys">
-        <div className="side-nav-head">KundenJourneys</div>
-        {journeys.length === 0 && <p className="small muted">Noch keine Journeys – zuerst unter «Journeys» anlegen.</p>}
-        {journeys.map((j) => {
-          const c = counts.find((x) => x.journeyId === j.id);
-          const total = c ? c.active + c.done + c.cancelled : 0;
-          return (
-            <button key={j.id} className={`side-nav-item${j.id === selected ? " active" : ""}`} onClick={() => select(j.id)} aria-current={j.id === selected ? "page" : undefined}>
-              <span className="side-nav-name">{j.name}</span>
-              <span className="side-nav-count" title={c ? `${c.active} aktiv, ${c.done} abgeschlossen, ${c.cancelled} abgebrochen` : "Noch keinem Kunden zugewiesen"}>
-                {c?.active ?? 0} / {total}
-              </span>
+      <div className="side-col">
+        <nav className="side-nav" aria-label="Journeys">
+          <div className="side-nav-head">KundenJourneys (Kampagnen)</div>
+          {journeys.length === 0 && <p className="small muted">Noch keine Journeys – zuerst unter «Journeys» anlegen.</p>}
+          {journeys.map((j) => {
+            const c = counts.find((x) => x.journeyId === j.id);
+            const total = c ? c.active + c.done + c.cancelled : 0;
+            return (
+              <button
+                key={j.id}
+                className={`side-nav-item${!event && j.id === selected ? " active" : ""}`}
+                onClick={() => select(j.id)}
+                aria-current={!event && j.id === selected ? "page" : undefined}
+              >
+                <span className="side-nav-name">{j.name}</span>
+                <span className="side-nav-count" title={c ? `${c.active} aktiv, ${c.done} abgeschlossen, ${c.cancelled} abgebrochen` : "Noch keinem Kunden zugewiesen"}>
+                  {c?.active ?? 0} / {total}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+        <nav className="side-nav" aria-label="Events">
+          <div className="side-nav-head">Events</div>
+          {events.length === 0 && <p className="small muted">Noch keine Events – unter Administration → Events anlegen.</p>}
+          {events.map((e) => (
+            <button
+              key={e.id}
+              className={`side-nav-item${e.id === eventId ? " active" : ""}`}
+              onClick={() => selectEvent(e.id)}
+              aria-current={e.id === eventId ? "page" : undefined}
+              title={e.serviceName ? `Trigger-Service: ${e.serviceName}` : undefined}
+            >
+              <span className="side-nav-name">{e.name}</span>
+              <span className="side-nav-count">{UPDATE_FREQUENCY_LABELS[e.updateFrequency] ?? e.updateFrequency}</span>
             </button>
-          );
-        })}
-      </nav>
+          ))}
+        </nav>
+      </div>
 
       <div className="side-main">
-        {journey ? (
+        {event ? (
+          <EventDetail event={event} eventTimer={eventTimer} onJourney={select} onChanged={(e) => setEvents(events.map((x) => (x.id === e.id ? e : x)))} />
+        ) : journey ? (
           <JourneyRuns key={journey.id} journey={journey} rules={rules} onCountsChanged={refreshCounts} />
         ) : (
           <section className="card">
@@ -84,6 +128,139 @@ export function CustomerJourneysClient({
         )}
       </div>
     </div>
+  );
+}
+
+/** When the background timer calls the event's service next (from the last call). */
+function nextCallText(event: EventView, eventTimer: boolean) {
+  const next = nextDueAt(event.updateFrequency, event.lastCall ? new Date(event.lastCall.at) : null);
+  if (!next) return <span className="muted">nur von Hand («Service jetzt aufrufen»)</span>;
+  if (!eventTimer) return <span className="muted">nur von Hand – der automatische Zeitgeber ist ausgeschaltet</span>;
+  if (next.getTime() <= Date.now()) return "fällig – beim nächsten Durchgang des Zeitgebers (jede Minute)";
+  return `automatisch ab ${formatDate(next.toISOString(), true)}`;
+}
+
+/** An event chosen in the «Events» panel: what it is and which trigger service reports it. */
+function EventDetail({
+  event,
+  eventTimer,
+  onJourney,
+  onChanged,
+}: {
+  event: EventView;
+  eventTimer: boolean;
+  onJourney: (journeyId: string) => void;
+  onChanged: (event: EventView) => void;
+}) {
+  const [calling, setCalling] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const call = event.lastCall;
+
+  async function callNow() {
+    setCalling(true);
+    setError(null);
+    try {
+      onChanged(await api<EventView>(`/api/events/${event.id}/call`, { method: "POST" }));
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setCalling(false);
+    }
+  }
+
+  return (
+    <section className="card">
+      <h2>{event.name}</h2>
+      {event.description && (
+        <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
+          {event.description}
+        </p>
+      )}
+      <dl className="event-facts">
+        <dt>Trigger-Service</dt>
+        <dd>
+          {event.serviceName ?? <span className="badge badge-danger">Service fehlt</span>}
+          {event.serviceName && !event.serviceIsTrigger && (
+            <>
+              {" "}
+              <span className="badge badge-warn">kein Trigger-Service mehr</span>
+            </>
+          )}
+        </dd>
+        <dt>Journey</dt>
+        <dd>
+          {event.journeyName && event.journeyId ? (
+            <button type="button" className="btn-link" onClick={() => onJourney(event.journeyId!)}>
+              {event.journeyName}
+            </button>
+          ) : (
+            <span className="muted">–</span>
+          )}
+        </dd>
+        <dt>Aktualisierung</dt>
+        <dd>
+          <span className="badge badge-accent">{UPDATE_FREQUENCY_LABELS[event.updateFrequency] ?? event.updateFrequency}</span>
+        </dd>
+        <dt>Nächster Aufruf</dt>
+        <dd>{nextCallText(event, eventTimer)}</dd>
+        <dt>Geändert</dt>
+        <dd>{formatDate(event.updatedAt)}</dd>
+      </dl>
+
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
+        <h3 style={{ margin: 0 }}>Letzter Service-Aufruf</h3>
+        <button className="btn btn-sm" disabled={calling || !event.serviceName} onClick={callNow}>
+          {calling ? "Wird aufgerufen …" : "Service jetzt aufrufen"}
+        </button>
+      </div>
+      <Notice kind="error">{error}</Notice>
+      {!call ? (
+        <p className="empty">Der Trigger-Service wurde für dieses Event noch nie aufgerufen.</p>
+      ) : (
+        <>
+          <dl className="event-facts">
+            <dt>Zeitpunkt</dt>
+            <dd>
+              {formatDate(call.at, true)} · {call.byName}
+            </dd>
+            <dt>Ergebnis</dt>
+            <dd>
+              {call.mock ? (
+                <span className="badge badge-warn">Mock – Zufallswerte</span>
+              ) : call.ok ? (
+                <span className="badge badge-ok">OK</span>
+              ) : (
+                <span className="badge badge-danger">Fehler</span>
+              )}
+              {call.httpStatus !== null && <span className="small muted"> HTTP {call.httpStatus}</span>}
+              {call.durationMs !== null && !call.mock && <span className="small muted"> · {call.durationMs} ms</span>}
+            </dd>
+            <dt>Service</dt>
+            <dd>
+              {call.serviceName}{" "}
+              <code className="small mono" style={{ overflowWrap: "anywhere" }}>
+                GET {call.url}
+              </code>
+            </dd>
+            {call.error && (
+              <>
+                <dt>Fehler</dt>
+                <dd style={{ color: "var(--danger)" }}>{call.error}</dd>
+              </>
+            )}
+          </dl>
+          {call.values && <MappedTable rows={call.values} />}
+          {call.raw !== null && (
+            <details style={{ marginTop: 8 }}>
+              <summary className="small">Antwort (roh)</summary>
+              <pre className="mono small" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 320, overflow: "auto" }}>
+                {prettyJson(call.raw)}
+              </pre>
+            </details>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttributeDef } from "./positions";
-import { buildRequest, isUnavailable, listSpecProblem, mapResponse, mockResponse, randomResponse, type ServiceAttrDef } from "./serviceCall";
+import { buildRequest, isCustomerNumberAttribute, isUnavailable, listSpecProblem, mapResponse, mockResponse, randomResponse, usesCustomerNumbers, type ServiceAttrDef } from "./serviceCall";
 
 const def = (id: string, attribute: string, attributeType: AttributeDef["attributeType"], options: string[] = []): AttributeDef => ({
   id,
@@ -149,5 +149,39 @@ describe("randomResponse (Mock services)", () => {
     const a = randomResponse(defs);
     const b = randomResponse(defs);
     expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+});
+
+describe("randomResponse with customer numbers", () => {
+  const ids = ["c1", "c2", "c3"];
+  const defs: ServiceAttrDef[] = [
+    { id: "1", attribute: "Kundennummer", attributeType: "alpha", options: [] },
+    { id: "2", attribute: "Hypothek", attributeType: "alpha", options: [] },
+    {
+      id: "3",
+      attribute: "Treffer",
+      attributeType: "alpha",
+      options: [],
+      list: { path: "", columns: [{ attribute: "Kunden-Nr.", attributeType: "alpha", options: [] }] },
+    },
+  ];
+  it("recognises customer number names", () => {
+    expect(["Kundennummer", "Kunden-Nr.", "KundenId", "customer_id", "Kunde"].every(isCustomerNumberAttribute)).toBe(true);
+    expect(isCustomerNumberAttribute("Kundensegment")).toBe(false);
+    expect(usesCustomerNumbers(defs)).toBe(true);
+    expect(usesCustomerNumbers([defs[1]])).toBe(false);
+  });
+  it("takes them from the given customers, other text stays random", () => {
+    for (let i = 0; i < 20; i++) {
+      const json = randomResponse(defs, "2026-11-24", Math.random, ids) as { Kundennummer: string; Hypothek: string; Treffer: { "Kunden-Nr.": string }[] };
+      expect(ids).toContain(json.Kundennummer);
+      expect(ids).not.toContain(json.Hypothek);
+      // the rows use different customers as long as there are enough
+      const rows = json.Treffer.map((r) => r["Kunden-Nr."]);
+      expect(rows.every((r) => ids.includes(r))).toBe(true);
+    }
+  });
+  it("random text without customers", () => {
+    expect(["c1", "c2", "c3"]).not.toContain((randomResponse(defs) as { Kundennummer: string }).Kundennummer);
   });
 });

@@ -89,7 +89,7 @@ const STEPS = (mode: AuthMode): { title: string; text: string }[] => [
   mode === "local"
     ? { title: "Anmelden", text: "Mit E-Mail und Passwort. Eine Administratorin oder ein Administrator gibt Dir eine Rolle." }
     : { title: "Anmelden", text: "Mit Deinem nexusIdentity-Konto. Eine Administratorin oder ein Administrator gibt Dir eine Rolle." },
-  { title: "Daten aufbauen", text: "Kunden mit Positionen und Transaktionen erfassen, Attribute und Services in der Administration einrichten." },
+  { title: "Daten aufbauen", text: "Kunden mit Positionen und Transaktionen erfassen oder als CSV, Excel oder JSON hochladen, Attribute und Services in der Administration einrichten." },
   { title: "Zielgruppe finden", text: "Eine Kunden Selektion definieren und die Treffer prüfen." },
   { title: "Journey starten", text: "Die Journey der Selektion zuweisen und jeden Kunden Schritt für Schritt begleiten." },
 ];
@@ -111,7 +111,7 @@ const FAQ = (mode: AuthMode): { q: string; a: string }[] => [
   },
   {
     q: "Wer darf was?",
-    a: "Editoren verwalten Kunden, Positionen, Transaktionen, Kunden Selektionen und KundenJourneys. Administratoren richten zusätzlich Attribute, Wertelisten, Aktionen, Services, Journey-Vorlagen und E-Mail ein und vergeben die Rollen. Die Rechte werden bei jeder Anfrage auf dem Server geprüft.",
+    a: "Editoren verwalten Kunden, Positionen, Transaktionen, Kunden Selektionen und KundenJourneys. Administratoren richten zusätzlich Attribute, Wertelisten, Aktionen, Services, Events, Journey-Vorlagen und E-Mail ein, laden Daten hoch und vergeben die Rollen. Die Rechte werden bei jeder Anfrage auf dem Server geprüft.",
   },
   {
     q: "Verschickt nexusMAUT selbst E-Mails an Kunden?",
@@ -323,9 +323,6 @@ export function Landing({ stats, authMode }: { stats: HomeStats; authMode: AuthM
         </Link>
       </section>
 
-      <footer className="hp-footer hp-wrap">
-        <span>nexusMAUT · Marketing Automation der nexus-Apps</span>
-      </footer>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { MANUAL_SOURCE_NAME } from "@/lib/uploads";
 import { dayToDb } from "@/lib/customers";
 import { requireUser } from "@/lib/server/auth";
 import { parseCustomerAttributes, toCustomer } from "@/lib/server/customers";
@@ -44,6 +45,8 @@ export const POST = route(async (req: Request) => {
     ...input,
     dateOfBirth: dayToDb(input.dateOfBirth),
     attributes: attributes ? await parseCustomerAttributes(attributes) : {},
+    uploadName: MANUAL_SOURCE_NAME, // entered by hand
+    uploadDate: now,
     createdAt: now,
     updatedAt: now,
   };

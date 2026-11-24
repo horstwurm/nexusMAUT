@@ -1,3 +1,6 @@
+import type { UpdateFrequency } from "@/lib/events";
+import type { MappedValue } from "@/lib/serviceCall";
+import type { UploadSource } from "@/lib/uploads";
 import type { StepStatus } from "@/lib/stepStatus";
 import type { FeedbackMeaning } from "@/lib/feedbackOptions";
 // Shapes the server hands to client components (JSON-safe).
@@ -18,6 +21,11 @@ export type Customer = {
   serviceFetched?: ServiceFetchedView;
   /** number of positions (customer list only) */
   positionCount?: number;
+  /** set by an upload (Admin → Data Management); null = entered by hand */
+  uploadSource: UploadSource | null;
+  /** the upload's unique name */
+  uploadName: string | null;
+  uploadDate: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -67,6 +75,11 @@ export type PositionTransaction = {
   /** trx attribute id → value (string | number | boolean) */
   values: Record<string, string | number | boolean>;
   serviceFetched?: ServiceFetchedView;
+  /** set by an upload (Admin → Data Management); null = entered by hand */
+  uploadSource: UploadSource | null;
+  /** the upload's unique name */
+  uploadName: string | null;
+  uploadDate: string | null;
   sort: number;
   updatedAt: string;
 };
@@ -81,6 +94,11 @@ export type CustomerPosition = {
   /** attribute id → value (string | number | boolean) */
   values: Record<string, string | number | boolean>;
   serviceFetched?: ServiceFetchedView;
+  /** set by an upload (Admin → Data Management); null = entered by hand */
+  uploadSource: UploadSource | null;
+  /** the upload's unique name */
+  uploadName: string | null;
+  uploadDate: string | null;
   sort: number;
   updatedAt: string;
 };
@@ -236,6 +254,40 @@ export type ExecutionResult = {
   errors: string[];
 };
 
+export type EventView = {
+  id: string;
+  name: string;
+  description: string;
+  serviceId: string;
+  /** null when the service is gone */
+  serviceName: string | null;
+  /** false when the service isn't a trigger service (any more) */
+  serviceIsTrigger: boolean;
+  updateFrequency: UpdateFrequency;
+  /** null on events from before the field existed */
+  journeyId: string | null;
+  /** null when there is none or it is gone */
+  journeyName: string | null;
+  /** latest call of the trigger service, null = never called */
+  lastCall: EventCallView | null;
+  updatedAt: string;
+};
+
+export type EventCallView = {
+  at: string;
+  /** who pressed «Service jetzt aufrufen» */
+  byName: string;
+  serviceName: string;
+  url: string;
+  ok: boolean;
+  mock: boolean;
+  httpStatus: number | null;
+  durationMs: number | null;
+  error: string | null;
+  values: MappedValue[] | null;
+  raw: string | null;
+};
+
 export type ActionView = {
   id: string;
   name: string;
@@ -258,4 +310,49 @@ export type RuleView = {
   updatedAt: string;
   /** number of matching customers (lists) */
   matchCount?: number;
+};
+
+/** Admin → Data Management → Initial Upload: what a source contains and what an upload would do. */
+export type UploadReport = {
+  source: UploadSource;
+  files: string[];
+  counts: { customers: number; positions: number; transactions: number; products: number };
+  /** «Privatkonto (konto)» */
+  newTypes: string[];
+  /** «Privatkonto · Position: Saldo (Zahl)» */
+  newAttributes: string[];
+  newCustomerAttributes: string[];
+  /** what the upload deletes first (0 when the switch is off) */
+  deletes: { customers: number; positions: number; transactions: number; customerJourneys: number; attributes: number };
+  /** «Upload Daten löschen»: the selected uploads and what of their data is deleted first */
+  uploadDeletes: { names: string[]; customers: number; positions: number; transactions: number; customerJourneys: number } | null;
+  /** customers already there (kept when «Bestehende Kunden löschen» is off) */
+  existingCustomers: number;
+  /** the first 100 */
+  errors: string[];
+  errorCount: number;
+  warnings: string[];
+};
+
+export type UploadResult = UploadReport & {
+  /** false: test only, or not uploaded because of errors */
+  done: boolean;
+  /** the upload's unique name (when uploaded) */
+  sourceName: string | null;
+  created: { customers: number; positions: number; transactions: number; products: number; types: number; attributes: number } | null;
+};
+
+/** Admin → Data Management: an earlier upload, with what of its data is still there */
+export type UploadView = {
+  id: string;
+  name: string;
+  source: UploadSource;
+  files: string[];
+  createdAt: string;
+  createdByName: string;
+  /** as uploaded */
+  counts: { customers: number; positions: number; transactions: number; products: number } | null;
+  /** records still carrying its name */
+  current: { customers: number; positions: number; transactions: number };
+  deletedAt: string | null;
 };

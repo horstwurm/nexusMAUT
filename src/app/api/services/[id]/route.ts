@@ -2,12 +2,14 @@ import { serviceSourceUsage } from "@/lib/server/serviceSources";
 import { requireUser } from "@/lib/server/auth";
 import { collections } from "@/lib/server/db";
 import { assertDomainValue } from "@/lib/server/domains";
+import { eventsOfService } from "@/lib/server/events";
+import { TRIGGER_SERVICE_TYPE } from "@/lib/events";
 import { HttpError, isDuplicate, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { serviceInput } from "@/lib/server/schemas";
 import { serviceCounts, toService } from "@/lib/server/services";
 
 // PUT    /api/services/ID { name, serviceType, url? } – change (admins); a type deactivated since may stay
-// DELETE /api/services/ID – with its PUT / GET attributes (admins)
+// DELETE /api/services/ID – with its PUT / GET attributes (admins); refused while attributes or events use it
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -19,6 +21,10 @@ export const PUT = route(async (req: Request, ctx: Ctx) => {
   const before = await services.findOne({ _id: id });
   if (!before) throw new HttpError(404, "Nicht gefunden");
   await assertDomainValue("serviceType", input.serviceType, before.serviceType);
+  if (before.serviceType === TRIGGER_SERVICE_TYPE && input.serviceType !== TRIGGER_SERVICE_TYPE) {
+    const triggers = await eventsOfService(id);
+    if (triggers.length) throw new HttpError(409, `Der Service löst die Events ${triggers.join(", ")} aus – er muss ein Trigger-Service bleiben`);
+  }
   let doc;
   try {
     doc = await services.findOneAndUpdate({ _id: id }, { $set: { ...input, updatedAt: new Date() } }, { returnDocument: "after" });
@@ -36,6 +42,8 @@ export const DELETE = route(async (_req: Request, ctx: Ctx) => {
   const { services, servicePutAttributes, serviceGetAttributes } = await collections();
   const used = await serviceSourceUsage({ serviceId: id });
   if (used.length) throw new HttpError(409, `Der Service liefert Werte für ${used.join(", ")} – zuerst dort ändern`);
+  const triggers = await eventsOfService(id);
+  if (triggers.length) throw new HttpError(409, `Der Service löst die Events ${triggers.join(", ")} aus – zuerst dort ändern`);
   const res = await services.deleteOne({ _id: id });
   if (!res.deletedCount) throw new HttpError(404, "Nicht gefunden");
   await Promise.all([servicePutAttributes.deleteMany({ serviceId: id }), serviceGetAttributes.deleteMany({ serviceId: id })]);

@@ -4,14 +4,16 @@ import { requireUser } from "@/lib/server/auth";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { callService } from "@/lib/server/serviceCaller";
 import { requireService, serviceAttributeDefs } from "@/lib/server/services";
-import { CALL_METHODS } from "@/lib/serviceCall";
+import { CALL_METHODS, usesCustomerNumbers } from "@/lib/serviceCall";
+import { sampleCustomerNumbers } from "@/lib/server/customers";
 
 // POST /api/services/ID/call { method, values: { PUT_ATTRIBUTE_ID: value } } – calls
 // the service (admins, «Testen» in Admin) via `callService`: PUT attributes
 // by name as JSON body (GET: query parameters), the JSON response mapped onto
 // the GET attributes. Answers 200 also when the service fails – the result
 // says what happened; not available → `mock` with sample data. A service with
-// «Mock» switched on isn't called: `random: true` and random values.
+// «Mock» switched on isn't called: `random: true` and random values («Kundennummer»
+// attributes: ids of real customers).
 
 export const maxDuration = 30;
 
@@ -28,5 +30,8 @@ export const POST = route(async (req: Request, ctx: { params: Promise<{ id: stri
   const [putDefs, getDefs] = await Promise.all([serviceAttributeDefs(service._id, "put"), serviceAttributeDefs(service._id, "get")]);
   const parsed = parseAttributeValues(putDefs, input);
   if ("error" in parsed) throw new HttpError(400, parsed.error);
-  return Response.json(await callService(service.url ?? "", method, putDefs, getDefs, parsed.values, { mock: service.mock }), { headers: NO_STORE });
+  const customerNumbers = service.mock && usesCustomerNumbers(getDefs) ? await sampleCustomerNumbers() : undefined;
+  return Response.json(await callService(service.url ?? "", method, putDefs, getDefs, parsed.values, { mock: service.mock, customerNumbers }), {
+    headers: NO_STORE,
+  });
 });

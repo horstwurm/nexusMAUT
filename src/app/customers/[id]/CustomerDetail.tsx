@@ -8,6 +8,7 @@ import { api, errorText, formatDate } from "@/lib/client";
 import { formatDay } from "@/lib/customers";
 import { labelOf } from "@/lib/domains";
 import { formatValue, type AttributeDef } from "@/lib/positions";
+import { UPLOAD_SOURCE_LABELS } from "@/lib/uploads";
 import type { Customer, CustomerComPref, CustomerPosition, CustomerProduct, DomainValue } from "@/lib/types";
 import { Positions } from "./Positions";
 
@@ -105,6 +106,15 @@ export function CustomerDetail({
           </h1>
           <p className="muted small" style={{ margin: 0 }}>
             Geboren {formatDay(customer.dateOfBirth)} · ID <span className="mono">{customer.id}</span>
+            {customer.uploadSource ? (
+              <>
+                {" "}
+                · aus Upload <strong>{customer.uploadName ?? UPLOAD_SOURCE_LABELS[customer.uploadSource]}</strong> ({UPLOAD_SOURCE_LABELS[customer.uploadSource]})
+                {customer.uploadDate && ` vom ${formatDate(customer.uploadDate, true)}`}
+              </>
+            ) : (
+              customer.uploadDate && ` · ${customer.uploadName ?? "Manuell"} erfasst am ${formatDate(customer.uploadDate, true)}`
+            )}
           </p>
           {customerAttributes.some((a) => customer.attributes[a.id] !== undefined) && (
             <div className="tags" style={{ marginTop: 8 }}>

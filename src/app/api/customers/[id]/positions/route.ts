@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { MANUAL_SOURCE_NAME } from "@/lib/uploads";
 import { parsePosition } from "@/lib/positions";
 import { requireUser } from "@/lib/server/auth";
 import { attributeDefsOf, requireCustomer, toCustomerPosition, toCustomerPositions } from "@/lib/server/customers";
@@ -40,6 +41,8 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     customerId: customer._id,
     productServiceType,
     values: parsed.values,
+    uploadName: MANUAL_SOURCE_NAME, // entered by hand
+    uploadDate: now,
     sort: last ? last.sort + 10 : 10,
     createdAt: now,
     updatedAt: now,

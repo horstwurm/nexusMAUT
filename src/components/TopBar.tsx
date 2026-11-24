@@ -8,7 +8,7 @@ const LINKS: { href: string; label: string; section: Section; admin?: boolean }[
   { href: "/customers", label: "Kunden", section: "customers" },
   { href: "/rules", label: "Kunden Selektionen", section: "rules" },
   { href: "/journeys", label: "Journeys", section: "journeys", admin: true },
-  { href: "/customer-journeys", label: "KundenJourneys", section: "customerJourneys" },
+  { href: "/customer-journeys", label: "KundenJourneys (Kampagnen)", section: "customerJourneys" },
   { href: "/admin", label: "Administration", section: "admin", admin: true },
 ];
 

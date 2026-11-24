@@ -1,8 +1,11 @@
 import "server-only";
+import type { UpdateFrequency } from "@/lib/events";
+import type { MappedValue } from "@/lib/serviceCall";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import type { DomainName } from "@/lib/domains";
 import { OLD_MEANINGS, type FeedbackMeaning } from "@/lib/feedbackOptions";
 import type { StepStatus } from "@/lib/stepStatus";
+import type { UploadSource } from "@/lib/uploads";
 import type { PositionValues } from "@/lib/positions";
 import type { Condition } from "@/lib/rules";
 import type { ListSpec } from "@/lib/serviceCall";
@@ -91,6 +94,12 @@ export type CustomerDoc = {
   /** values of the customer attributes (`customerAttributes._id` → value); missing = none set */
   attributes?: PositionValues;
   serviceFetched?: ServiceFetched;
+  /** loaded by an upload (Admin → Data Management): its source format; missing = entered by hand */
+  uploadSource?: UploadSource;
+  /** the upload's unique name (`uploads.name`) */
+  uploadName?: string;
+  /** when the last upload wrote this customer */
+  uploadDate?: Date;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -165,6 +174,11 @@ export type CustomerPositionDoc = {
   productServiceType: string;
   values: PositionValues;
   serviceFetched?: ServiceFetched;
+  /** loaded by an upload (Admin → Data Management); missing = entered by hand */
+  uploadSource?: UploadSource;
+  /** the upload's unique name (`uploads.name`) */
+  uploadName?: string;
+  uploadDate?: Date;
   sort: number;
   createdAt: Date;
   updatedAt: Date;
@@ -182,6 +196,11 @@ export type PositionTransactionDoc = {
   customerId: ObjectId;
   values: PositionValues;
   serviceFetched?: ServiceFetched;
+  /** loaded by an upload (Admin → Data Management); missing = entered by hand */
+  uploadSource?: UploadSource;
+  /** the upload's unique name (`uploads.name`) */
+  uploadName?: string;
+  uploadDate?: Date;
   sort: number;
   createdAt: Date;
   updatedAt: Date;
@@ -333,6 +352,23 @@ export type StepExecution = {
   by: string;
 };
 
+/** One upload in Admin → Data Management (name unique, case-insensitive) – the records carry its name. */
+export type UploadDoc = {
+  _id: ObjectId;
+  name: string;
+  source: UploadSource;
+  kind: "initial";
+  files: string[];
+  options: { deleteCustomers: boolean; deleteAttributes: boolean };
+  /** filled when the upload has finished */
+  counts: { customers: number; positions: number; transactions: number; products: number } | null;
+  createdAt: Date;
+  createdBy: string;
+  /** its data deleted by a later upload («Upload Daten löschen»); the name stays reserved */
+  deletedAt?: Date;
+  deletedBy?: string;
+};
+
 /** A customer's feedback on a step of a KundenJourney (relation customerFeedback). */
 export type CustomerFeedbackDoc = {
   _id: ObjectId;
@@ -361,6 +397,47 @@ export type ActionDoc = {
    * Only the sha256 is stored; the key is shown once when created.
    */
   apiKey?: { hash: string; hint: string; createdAt: Date; createdBy: string; lastUsedAt?: Date };
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * An event (Ereignis) – managed in Admin; name unique (case-insensitive).
+ * `serviceId` = a service of the service type «triggerservice» (TRIGGER_SERVICE_TYPE)
+ * that reports it; `updateFrequency` = how often that service is to be asked;
+ * `journeyId` = the journey the event belongs to (missing on events created before it was added).
+ */
+/** One call of an event's trigger service (GET, no input values). */
+export type EventCall = {
+  at: Date;
+  /** user id, or TIMER_CALLER for the background timer */
+  by: string;
+  serviceName: string;
+  url: string;
+  /** a 2xx answer that was JSON */
+  ok: boolean;
+  /** «Mock» service: not called, random values */
+  mock: boolean;
+  httpStatus: number | null;
+  durationMs: number | null;
+  error: string | null;
+  /** the answer mapped onto the GET attributes (null without a usable answer – never sample data) */
+  values: MappedValue[] | null;
+  /** the raw answer, at most 20'000 characters */
+  raw: string | null;
+};
+
+export type EventDoc = {
+  _id: ObjectId;
+  name: string;
+  description: string;
+  serviceId: ObjectId;
+  updateFrequency: UpdateFrequency;
+  journeyId?: ObjectId;
+  /** the latest call of the trigger service («Service jetzt aufrufen»), missing = never called */
+  lastCall?: EventCall;
+  /** the timer's claim while it calls the service (so two servers never call it twice) */
+  callLockedUntil?: Date;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -536,6 +613,7 @@ async function init(db: Db) {
     // an attribute name once, case-insensitive
     c.customerAttributes.createIndex({ attribute: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "customer_attribute_unique" }),
     c.customerAttributes.createIndex({ sort: 1 }),
+    c.uploads.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "upload_name_unique" }),
     c.domainValues.createIndex({ domain: 1, code: 1 }, { unique: true }),
     c.domainValues.createIndex({ domain: 1, sort: 1 }),
     c.customerProducts.createIndex({ customerId: 1, name: 1 }),
@@ -555,6 +633,9 @@ async function init(db: Db) {
       { unique: true, collation: { locale: "de", strength: 2 }, name: "action_attribute_unique" },
     ),
     c.actionAttributes.createIndex({ actionId: 1, sort: 1 }),
+    c.events.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "event_name_unique" }),
+    c.events.createIndex({ serviceId: 1 }),
+    c.events.createIndex({ journeyId: 1 }),
     c.journeys.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "journey_name_unique" }),
     c.journeySteps.createIndex({ journeyId: 1, sort: 1 }),
     c.feedbackOptions.createIndex(
@@ -594,6 +675,7 @@ function collectionsOf(db: Db) {
     passwordResets: db.collection<PasswordResetDoc>("passwordResets"),
     loginFailures: db.collection<LoginFailureDoc>("loginFailures"),
     customers: db.collection<CustomerDoc>("customers"),
+    uploads: db.collection<UploadDoc>("uploads"),
     customerAttributes: db.collection<CustomerAttributeDoc>("customerAttributes"),
     customerProducts: db.collection<CustomerProductDoc>("customerProducts"),
     customerComPrefs: db.collection<CustomerComPrefDoc>("customerComPrefs"),
@@ -608,6 +690,7 @@ function collectionsOf(db: Db) {
     /** same collection as `settings`, the doc `_id: "auth"` */
     authSettings: db.collection<AuthSettingsDoc>("settings"),
     actionAttributes: db.collection<ActionAttributeDoc>("actionAttributes"),
+    events: db.collection<EventDoc>("events"),
     journeys: db.collection<JourneyDoc>("journeys"),
     journeySteps: db.collection<JourneyStepDoc>("journeySteps"),
     feedbackOptions: db.collection<JourneyStepFeedbackOptionDoc>("journeyStepFeedbackOptions"),

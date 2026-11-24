@@ -1,5 +1,6 @@
 "use client";
 
+import { SourceCells, SourceHeaders } from "./[id]/SourceColumns";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
@@ -161,6 +162,7 @@ export function CustomersClient({
                   {customerAttributes.map((a) => (
                     <AttrHeader key={a.id} def={a} />
                   ))}
+                  <SourceHeaders />
                   <th>Geändert</th>
                   <th />
                 </tr>
@@ -189,6 +191,7 @@ export function CustomersClient({
                       {customerAttributes.map((a) => (
                         <AttrCell key={a.id} def={a} value={c.attributes[a.id]} fetched={c.serviceFetched} />
                       ))}
+                      <SourceCells source={c.uploadSource} name={c.uploadName} date={c.uploadDate} />
                       <td>{formatDate(c.updatedAt)}</td>
                       <td>
                         <div className="row" style={{ justifyContent: "flex-end", flexWrap: "nowrap" }}>
@@ -215,7 +218,7 @@ export function CustomersClient({
                     </tr>
                     {open.has(c.id) && (
                       <tr>
-                        <td colSpan={6 + customerAttributes.length} className="accordion-body">
+                        <td colSpan={8 + customerAttributes.length} className="accordion-body">
                           <CustomerPositionsPanel
                             key={version}
                             customerId={c.id}

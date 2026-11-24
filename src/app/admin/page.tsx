@@ -8,13 +8,18 @@ import { requirePageUser, toMe } from "@/lib/server/auth";
 import { authSettingsView } from "@/lib/server/authSettings";
 import { collections } from "@/lib/server/db";
 import { domainValues, toAdminDomainValue, toTypeAttribute } from "@/lib/server/domains";
+import { listEvents } from "@/lib/server/events";
+import { eventTimerEnabled } from "@/lib/server/eventTimer";
+import { listJourneys } from "@/lib/server/journeys";
 import { mailSettingsView } from "@/lib/server/mailSettings";
 import { listServices } from "@/lib/server/services";
 import { ActionsAdmin } from "./ActionsAdmin";
 import { AuthAdmin } from "./AuthAdmin";
 import { AdminTabs } from "./AdminTabs";
 import { CustomerAttributesAdmin } from "./CustomerAttributesAdmin";
+import { DataManagementAdmin } from "./DataManagementAdmin";
 import { DomainAdmin } from "./DomainAdmin";
+import { EventsAdmin } from "./EventsAdmin";
 import { MailAdmin } from "./MailAdmin";
 import { ServicesAdmin } from "./ServicesAdmin";
 import { UsersClient } from "./UsersClient";
@@ -28,7 +33,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   // Journeys moved to its own page in the top bar
   if (tab === "journeys") redirect("/journeys");
   const { customerAttributes, users } = await collections();
-  const [customerAttrs, actions, productTypes, comPrefs, mail, serviceTypes, services, auth] = await Promise.all([
+  const [customerAttrs, actions, productTypes, comPrefs, mail, serviceTypes, services, auth, events, journeys] = await Promise.all([
     customerAttributes
       .find()
       .sort({ sort: 1, attribute: 1 })
@@ -41,6 +46,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     domainValues("serviceType").then((list) => Promise.all(list.map(toAdminDomainValue))),
     listServices(),
     authSettingsView(),
+    listEvents(),
+    listJourneys(),
   ]);
   const viaIdentity = (u: { _id: string; oidcSub?: string }) => !u._id.startsWith("local_") || Boolean(u.oidcSub);
   const userList = (await users.find().sort({ role: -1, name: 1 }).toArray()).map((u) => ({
@@ -58,7 +65,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <div>
             <h1>Administration</h1>
             <p className="muted" style={{ margin: 0 }}>
-              Kundenattribute, Wertelisten, Aktionen, Services, Benutzer, Anmeldung und E-Mail-Versand.
+              Kundenattribute, Wertelisten, Aktionen, Services, Events, Benutzer, Anmeldung, E-Mail-Versand und Data Management.
             </p>
           </div>
         </div>
@@ -99,6 +106,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 </>
               ),
             },
+            { id: "events", label: "Events", count: events.length, content: <EventsAdmin initial={events} services={services} journeys={journeys} timerOn={eventTimerEnabled()} /> },
             {
               id: "users",
               label: "Benutzer",
@@ -121,6 +129,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
               content: <AuthAdmin initial={auth} myPassword={Boolean(user.passwordHash)} myIdentity={viaIdentity(user)} />,
             },
             { id: "email", label: "E-Mail", content: <MailAdmin initial={mail} myEmail={user.email} /> },
+            { id: "data", label: "Data Management", content: <DataManagementAdmin /> },
           ]}
         />
       </main>
