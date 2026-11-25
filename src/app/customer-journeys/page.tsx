@@ -5,15 +5,15 @@ import { requirePageUser, toMe } from "@/lib/server/auth";
 import { journeyRunCounts } from "@/lib/server/customerJourneys";
 import { collections } from "@/lib/server/db";
 import { listEvents } from "@/lib/server/events";
-import { eventTimerEnabled } from "@/lib/server/eventTimer";
 import { listJourneys } from "@/lib/server/journeys";
 import { loadRuleDataset, matchingCustomers } from "@/lib/server/rules";
 import { CustomerJourneysClient } from "./CustomerJourneysClient";
 
-export const metadata: Metadata = { title: "KundenJourneys (Kampagnen)" };
+export const metadata: Metadata = { title: "Kunden Journeys" };
 
 // Journeys assigned to customers and their progress (editors and admins):
-// the journeys and the events on the left, the selected one (?journey=ID / ?event=ID) on the right.
+// the journeys on the left in two panels (Kampagne / Event), the selected one (?journey=ID) on the right –
+// an Event journey with its events (trigger service, last call) above its runs.
 export default async function CustomerJourneysPage({ searchParams }: { searchParams: Promise<{ journey?: string; event?: string }> }) {
   await connection();
   const user = await requirePageUser("/customer-journeys");
@@ -26,18 +26,21 @@ export default async function CustomerJourneysPage({ searchParams }: { searchPar
     listEvents(),
   ]);
   const ds = await loadRuleDataset();
+  // ?journey=ID, or ?event=ID (older links) → the event's journey; else the first campaign
+  const eventJourney = event ? events.find((e) => e.id === event)?.journeyId : undefined;
+  const wanted = journey ?? eventJourney;
+  const initialJourney =
+    wanted && journeys.some((j) => j.id === wanted) ? wanted : (journeys.find((j) => j.journeyType === "campaign") ?? journeys[0])?.id ?? null;
   return (
     <>
       <TopBar me={toMe(user)} active="customerJourneys" />
       <main className="page page-full">
         <CustomerJourneysClient
-          journeys={journeys.map((j) => ({ id: j.id, name: j.name, description: j.description, stepCount: j.stepCount }))}
+          journeys={journeys.map((j) => ({ id: j.id, name: j.name, description: j.description, stepCount: j.stepCount, journeyType: j.journeyType }))}
           rules={ruleList.map((r) => ({ id: r._id.toHexString(), name: r.name, matchCount: matchingCustomers(r, ds).length }))}
           initialCounts={counts}
           events={events}
-          eventTimer={eventTimerEnabled()}
-          initialEventId={event && events.some((e) => e.id === event) ? event : null}
-          initialJourneyId={journey && journeys.some((j) => j.id === journey) ? journey : (journeys[0]?.id ?? null)}
+          initialJourneyId={initialJourney}
         />
       </main>
     </>

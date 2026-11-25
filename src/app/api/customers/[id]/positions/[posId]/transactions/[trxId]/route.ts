@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { parsePosition } from "@/lib/positions";
 import { requireUser } from "@/lib/server/auth";
-import { attributeDefsOf, requireCustomerPosition, toPositionTransaction } from "@/lib/server/customers";
+import { attributeDefsOf, requireCustomerPosition, rethrowDuplicateId, setWithId, toPositionTransaction } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { transactionInput } from "@/lib/server/schemas";
 import { refreshTransaction } from "@/lib/server/serviceAttributes";
 
-// PUT    /api/customers/ID/positions/POS/transactions/TRX { values } – replace the values
+// PUT    /api/customers/ID/positions/POS/transactions/TRX { externalId?, values } – replace the values
 // PATCH  /api/customers/ID/positions/POS/transactions/TRX { sort } – reorder
 // DELETE /api/customers/ID/positions/POS/transactions/TRX
 
@@ -22,15 +22,13 @@ async function target(ctx: Ctx) {
 export const PUT = route(async (req: Request, ctx: Ctx) => {
   await requireUser();
   const { position, filter } = await target(ctx);
-  const { values: input } = await readJson(req, transactionInput);
+  const { values: input, externalId } = await readJson(req, transactionInput);
   const parsed = parsePosition(await attributeDefsOf(position.productServiceType, "trx"), input);
   if ("error" in parsed) throw new HttpError(400, parsed.error);
   const { positionTransactions } = await collections();
-  const doc = await positionTransactions.findOneAndUpdate(
-    filter,
-    { $set: { values: parsed.values, updatedAt: new Date() } },
-    { returnDocument: "after" },
-  );
+  const doc = await positionTransactions
+    .findOneAndUpdate(filter, setWithId({ values: parsed.values, updatedAt: new Date() }, externalId), { returnDocument: "after" })
+    .catch((err) => rethrowDuplicateId(err, "Transaktion", externalId));
   if (!doc) throw new HttpError(404, "Nicht gefunden");
   await refreshTransaction(doc._id); // «Service» transaction attributes
   return Response.json(toPositionTransaction((await positionTransactions.findOne({ _id: doc._id }))!), { headers: NO_STORE });

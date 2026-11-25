@@ -1,11 +1,12 @@
 import "server-only";
 import { ObjectId } from "mongodb";
-import { TRIGGER_SERVICE_TYPE } from "@/lib/events";
+import { ID_REF_LABELS, idRefOf, TRIGGER_SERVICE_TYPE, type IdRef } from "@/lib/events";
 import type { EventView } from "@/lib/types";
-import { collections, type EventCall, type EventDoc, type JourneyDoc, type ServiceDoc } from "./db";
+import { collections, type EventCall, type EventDoc, type EventStart, type JourneyDoc, type ServiceDoc } from "./db";
 import { HttpError } from "./http";
-import { usesCustomerNumbers } from "@/lib/serviceCall";
-import { sampleCustomerNumbers } from "./customers";
+import { isIdAttribute, usesIds, type MappedValue } from "@/lib/serviceCall";
+import { assignJourney } from "./customerJourneys";
+import { sampleIds } from "./customers";
 import { callService } from "./serviceCaller";
 import { serviceAttributeDefs } from "./services";
 
@@ -22,8 +23,12 @@ export const toEvent = (
   serviceName: service?.name ?? null,
   serviceIsTrigger: service?.serviceType === TRIGGER_SERVICE_TYPE,
   updateFrequency: e.updateFrequency,
+  idRef: idRefOf(e),
   journeyId: e.journeyId?.toHexString() ?? null,
   journeyName: journey?.name ?? null,
+  lastStart: e.lastStart
+    ? { ...e.lastStart, at: e.lastStart.at.toISOString(), byName: userNames.get(e.lastStart.by) ?? "(gelöschter Benutzer)" }
+    : null,
   lastCall: e.lastCall
     ? {
         ...e.lastCall,
@@ -39,11 +44,10 @@ const idsOf = (list: (ObjectId | undefined)[]) =>
 
 /** Names of the users who made the events' last calls. */
 async function callerNames(list: EventDoc[]) {
-  const ids = [...new Set(list.flatMap((e) => (e.lastCall ? [e.lastCall.by] : [])))];
+  const ids = [...new Set(list.flatMap((e) => [e.lastCall?.by, e.lastStart?.by].filter((x): x is string => Boolean(x))))];
   if (!ids.length) return new Map<string, string>();
   const { users } = await collections();
   const names = new Map((await users.find({ _id: { $in: ids } }, { projection: { name: 1 } }).toArray()).map((u) => [u._id, u.name]));
-  names.set(TIMER_CALLER, "Zeitgeber (automatisch)");
   return names;
 }
 
@@ -73,14 +77,11 @@ export async function listEvents() {
   return toEvents(await events.find({}, { collation: { locale: "de" } }).sort({ name: 1 }).toArray());
 }
 
-/** `lastCall.by` of the background timer (eventTimer.ts). */
-export const TIMER_CALLER = "system:timer";
-
 /**
  * Calls the event's trigger service (GET, no input values – an event isn't
  * about one customer) and stores the result as the event's `lastCall`.
  * Service problems are stored too (no sample data), also a missing service /
- * URL – so the timer doesn't retry before the next due time; a «Mock» service
+ * URL; a «Mock» service
  * answers with random values.
  */
 export async function callEventService(id: ObjectId, userId: string) {
@@ -109,18 +110,18 @@ export async function callEventService(id: ObjectId, userId: string) {
       raw: null,
     };
   } else {
-    lastCall = await callTrigger(service, userId);
+    lastCall = await callTrigger(service, idRefOf(event), userId);
   }
-  const doc = await events.findOneAndUpdate({ _id: id }, { $set: { lastCall }, $unset: { callLockedUntil: "" } }, { returnDocument: "after" });
+  const doc = await events.findOneAndUpdate({ _id: id }, { $set: { lastCall } }, { returnDocument: "after" });
   if (!doc) throw new HttpError(404, "Event nicht gefunden");
   return (await toEvents([doc]))[0];
 }
 
-async function callTrigger(service: ServiceDoc, userId: string): Promise<EventCall> {
+async function callTrigger(service: ServiceDoc, idRef: IdRef, userId: string): Promise<EventCall> {
   const [putDefs, getDefs] = await Promise.all([serviceAttributeDefs(service._id, "put"), serviceAttributeDefs(service._id, "get")]);
-  // a mock answer names real customers (ids) in «Kundennummer» attributes
-  const customerNumbers = service.mock && usesCustomerNumbers(getDefs) ? await sampleCustomerNumbers() : undefined;
-  const res = await callService(service.url ?? "", "GET", putDefs, getDefs, {}, { mock: service.mock, customerNumbers });
+  // a mock answer names real records (their IDs) in «Kundennummer» / «Positionsnummer» / «Transaktionsnummer» attributes
+  const ids = service.mock && usesIds(idRef, getDefs) ? { kind: idRef, values: await sampleIds(idRef) } : undefined;
+  const res = await callService(service.url ?? "", "GET", putDefs, getDefs, {}, { mock: service.mock, ids });
   return {
     at: new Date(),
     by: userId,
@@ -134,6 +135,67 @@ async function callTrigger(service: ServiceDoc, userId: string): Promise<EventCa
     values: res.mapped,
     raw: res.response?.raw ?? null,
   };
+}
+
+/** The IDs in a call's answer: values of «Kundennummer»- (… «Positionsnummer»-, «Transaktionsnummer»-) like attributes and list columns (distinct). */
+export function idsInAnswer(kind: IdRef, values: MappedValue[]) {
+  const out = new Set<string>();
+  const add = (v: unknown) => {
+    if ((typeof v === "string" || typeof v === "number") && String(v).trim()) out.add(String(v).trim());
+  };
+  for (const v of values) {
+    if (v.list) {
+      const cols = v.list.columns.filter((c) => isIdAttribute(kind, c.attribute)).map((c) => c.attribute);
+      for (const row of v.list.rows) for (const c of cols) add(row.values[c]);
+    } else if (isIdAttribute(kind, v.attribute)) add(v.value);
+  }
+  return [...out];
+}
+
+const ID_NAME: Record<IdRef, string> = { customer: "Kundennummern", position: "Positionsnummern", transaction: "Transaktionsnummern" };
+
+/**
+ * The customers behind IDs of the kind: an ID is the record's «ID» (externalId)
+ * or, for records without one, its internal id; positions and transactions lead
+ * to their customer. Returns the distinct customers and the IDs not found.
+ */
+async function customersOfIds(kind: IdRef, numbers: string[]) {
+  const c = await collections();
+  const col = kind === "customer" ? c.customers : kind === "position" ? c.customerPositions : c.positionTransactions;
+  const oids = numbers.filter((n) => /^[0-9a-f]{24}$/i.test(n)).map((n) => new ObjectId(n.toLowerCase()));
+  const matches = await (col as typeof c.positionTransactions)
+    .find({ $or: [{ externalId: { $in: numbers } }, { _id: { $in: oids } }] }, { projection: { _id: 1, externalId: 1, customerId: 1 } })
+    .toArray();
+  const known = new Set(matches.flatMap((m) => [m._id.toHexString(), ...(m.externalId ? [m.externalId] : [])]));
+  const customerIds = new Map<string, ObjectId>();
+  for (const m of matches) {
+    const cid = kind === "customer" ? m._id : m.customerId;
+    customerIds.set(cid.toHexString(), cid);
+  }
+  return { customerIds: [...customerIds.values()], unknown: numbers.filter((n) => !known.has(n) && !known.has(n.toLowerCase())) };
+}
+
+/**
+ * «Journeys starten»: the event's journey for every customer named in its last
+ * service call – by Kundennummer, or by Positions- / Transaktionsnummer leading to
+ * their customer (`idRef`). Customers with an active run of the journey are
+ * skipped (assignJourney), unknown IDs reported.
+ */
+export async function startEventJourneys(id: ObjectId, userId: string) {
+  const { events } = await collections();
+  const event = await events.findOne({ _id: id });
+  if (!event) throw new HttpError(404, "Event nicht gefunden");
+  if (!event.journeyId) throw new HttpError(409, "Dem Event ist keine Journey zugeordnet – unter Administration → Events wählen");
+  if (!event.lastCall?.values) throw new HttpError(409, "Zuerst den Trigger-Service aufrufen – der letzte Aufruf hat keine Werte geliefert");
+  const kind = idRefOf(event);
+  const numbers = idsInAnswer(kind, event.lastCall.values);
+  if (!numbers.length) throw new HttpError(409, `Der letzte Aufruf nennt keine ${ID_NAME[kind]} (ID-Bezug «${ID_REF_LABELS[kind]}»)`);
+  const { customerIds: found, unknown } = await customersOfIds(kind, numbers);
+  const res = found.length ? await assignJourney({ journeyId: event.journeyId, customerIds: found, event: { id: event._id, name: event.name }, userId }) : { created: 0, skipped: 0 };
+  const lastStart: EventStart = { at: new Date(), by: userId, numbers: numbers.length, created: res.created, skipped: res.skipped, unknown: unknown.slice(0, 20) };
+  const doc = await events.findOneAndUpdate({ _id: id }, { $set: { lastStart } }, { returnDocument: "after" });
+  if (!doc) throw new HttpError(404, "Event nicht gefunden");
+  return (await toEvents([doc]))[0];
 }
 
 /** The event's journey: it must exist. */

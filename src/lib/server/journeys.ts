@@ -1,5 +1,6 @@
 import "server-only";
 import type { ObjectId } from "mongodb";
+import { journeyTypeOf } from "@/lib/journeyTypes";
 import type { FeedbackOptionView, JourneyView, JourneyStepView } from "@/lib/types";
 import { collections, type JourneyDoc, type JourneyStepDoc, type JourneyStepFeedbackOptionDoc } from "./db";
 import { HttpError } from "./http";
@@ -8,6 +9,7 @@ export const toJourney = (j: JourneyDoc, stepCount = 0): JourneyView => ({
   id: j._id.toHexString(),
   name: j.name,
   description: j.description,
+  journeyType: journeyTypeOf(j),
   updatedAt: j.updatedAt.toISOString(),
   stepCount,
 });

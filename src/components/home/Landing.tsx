@@ -72,7 +72,8 @@ const AREAS: Area[] = [
     title: "Jeden Kunden auf seiner Journey begleiten",
     lead: "Weise eine Journey einer ganzen Kunden Selektion oder einzelnen Kunden zu – und verfolge pro Kunde, wo er steht.",
     features: [
-      { icon: "route", text: "Zuweisen per Selektion oder einzeln – wer die Journey schon aktiv hat, wird übersprungen" },
+      { icon: "route", text: "Kampagnen: zuweisen per Selektion oder einzeln – wer die Journey schon aktiv hat, wird übersprungen" },
+      { icon: "bolt", text: "Events: ein Trigger-Service meldet die betroffenen Kunden (über Kunden-, Positions- oder Transaktions-ID), «Journeys starten» weist ihnen die Event-Journey zu" },
       { icon: "checklist", text: "Status pro Schritt: Vorschlag, Bereit zur Ausführung, Ausgesetzt, Erledigt oder Übersprungen – beim Erledigen wird der Inhalt für den Kunden aufbereitet und gespeichert" },
       { icon: "alert", text: "«Daten prüfen» findet Schritte, denen Daten fehlen – markiert als «Datenfehler»" },
       { icon: "bolt", text: "«Ausführen» sendet alle Schritte «Bereit zur Ausführung» an das System ihrer Aktion – nach Bestätigung, Schritte mit fehlenden Daten bleiben zurück" },
@@ -132,6 +133,14 @@ const FAQ = (mode: AuthMode): { q: string; a: string }[] => [
   {
     q: "Was sind Feedback-Optionen?",
     a: "Die Antworten, die ein Kunde auf einen Schritt geben kann, z.B. «Termin vereinbart» (Lead), «Bitte Offerte senden» (Chance), «Rückruf in einem halben Jahr» (Kein Interesse aktuell) oder «Nein danke» (Kein Interesse). Du legst sie pro Journey-Schritt fest; in den KundenJourneys stehen sie neben dem erfassten Feedback, und «API» zeigt die Anfrage, mit der ein Feedback gesetzt wird.",
+  },
+  {
+    q: "Wie kommen meine Daten in nexusMAUT?",
+    a: "Von Hand erfassen oder unter Administration → Data Management als CSV, Excel oder JSON hochladen. «Test» zeigt vorher alle Fehler mit Tabelle und Zeile; Kunden-, Positions- und Transaktionsnummern werden zur eindeutigen ID. Jeder Upload trägt einen Namen, seine Daten lassen sich später gezielt wieder löschen.",
+  },
+  {
+    q: "Was sind Events?",
+    a: "Ereignisse, die ein anderes System meldet – etwa auslaufende Hypotheken. Ein Trigger-Service liefert die IDs der betroffenen Kunden, Positionen oder Transaktionen; «Journeys starten» weist den zugehörigen Kunden die Journey des Events zu. Noch geschieht das auf Knopfdruck, nicht automatisch.",
   },
   {
     q: "Was prüft «Daten prüfen»?",

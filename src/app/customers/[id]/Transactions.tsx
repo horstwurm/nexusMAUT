@@ -99,6 +99,7 @@ export function Transactions({
             <thead>
               <tr>
                 <th className="num">#</th>
+                <th>ID</th>
                 {defs.map((d) => (
                   <AttrHeader key={d.id} def={d} />
                 ))}
@@ -110,6 +111,7 @@ export function Transactions({
               {list.map((t, i) => (
                 <tr key={t.id}>
                   <td className="num muted">{i + 1}</td>
+                  <td className="mono small">{t.externalId || <span className="muted">–</span>}</td>
                   {defs.map((d) => (
                     <AttrCell key={d.id} def={d} value={t.values[d.id]} fetched={t.serviceFetched} />
                   ))}
@@ -148,10 +150,11 @@ export function Transactions({
           title={editing === "new" ? "Neue Transaktion" : "Transaktion bearbeiten"}
           defs={defs}
           initial={formValues(defs, editing === "new" ? {} : editing.values)}
+          initialExternalId={editing === "new" ? "" : editing.externalId}
           fetched={editing === "new" ? undefined : editing.serviceFetched}
           onClose={() => setEditing(null)}
-          onSave={async (values) => {
-            await api(editing === "new" ? url : `${url}/${editing.id}`, { method: editing === "new" ? "POST" : "PUT", body: { values } });
+          onSave={async (values, externalId) => {
+            await api(editing === "new" ? url : `${url}/${editing.id}`, { method: editing === "new" ? "POST" : "PUT", body: { externalId, values } });
             setEditing(null);
             await reload();
           }}
@@ -166,6 +169,7 @@ function TransactionModal({
   title,
   defs,
   initial,
+  initialExternalId,
   fetched,
   onClose,
   onSave,
@@ -173,11 +177,13 @@ function TransactionModal({
   title: string;
   defs: AttributeDef[];
   initial: Record<string, FormValue>;
+  initialExternalId: string;
   fetched?: ServiceFetchedView;
   onClose: () => void;
-  onSave: (values: Record<string, FormValue>) => Promise<void>;
+  onSave: (values: Record<string, FormValue>, externalId: string) => Promise<void>;
 }) {
   const [values, setValues] = useState(initial);
+  const [externalId, setExternalId] = useState(initialExternalId);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
@@ -190,7 +196,7 @@ function TransactionModal({
           setBusy(true);
           setError(null);
           try {
-            await onSave(values);
+            await onSave(values, externalId);
           } catch (err) {
             setError(errorText(err));
             setBusy(false);
@@ -199,6 +205,10 @@ function TransactionModal({
       >
         <h2>{title}</h2>
         <Notice kind="error">{error}</Notice>
+        <label className="field">
+          <span>ID</span>
+          <input type="text" className="mono" maxLength={60} value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="z.B. Transaktionsnummer (optional, eindeutig)" />
+        </label>
         <AttributeFields defs={defs} values={values} onChange={setValues} fetched={fetched} />
         <p className="small muted">Leere Felder bleiben leer; mindestens ein Wert ist nötig.</p>
         <div className="actions">

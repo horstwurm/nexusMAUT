@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText, formatDate } from "@/lib/client";
+import { JOURNEY_TYPES, JOURNEY_TYPE_LABELS, type JourneyType } from "@/lib/journeyTypes";
 import type { JourneyView } from "@/lib/types";
 import { JourneyStepsModal } from "./JourneyStepsModal";
 
-type Draft = { id: string | null; name: string; description: string };
-const EMPTY: Draft = { id: null, name: "", description: "" };
+type Draft = { id: string | null; name: string; description: string; journeyType: JourneyType };
+const EMPTY: Draft = { id: null, name: "", description: "", journeyType: "campaign" };
 const BASE = "/api/journeys";
 
-/** The journeys page: name + description, steps per journey. */
+/** The journeys page: name, description, type (Kampagne / Event), steps per journey. */
 export function JourneysClient({ initial }: { initial: JourneyView[] }) {
   const [list, setList] = useState(initial);
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -38,7 +39,8 @@ export function JourneysClient({ initial }: { initial: JourneyView[] }) {
       <h2>
         Journeys <span className="count-badge">{list.length}</span>
       </h2>
-      <p className="small muted">Wege, die Kunden durchlaufen, z.B. «Onboarding Neukunde», «Hypothek verlängern» oder «Rückgewinnung».</p>
+      <p className="small muted">Wege, die Kunden durchlaufen, z.B. «Onboarding Neukunde», «Hypothek verlängern» oder «Rückgewinnung». Typ
+        «Kampagne»: Kunden werden zugewiesen; Typ «Event»: gehört zu einem Event (Administration → Events).</p>
       <Notice kind="error">{error}</Notice>
 
       {list.length === 0 ? (
@@ -49,6 +51,7 @@ export function JourneysClient({ initial }: { initial: JourneyView[] }) {
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Typ</th>
                 <th>Beschreibung</th>
                 <th>Geändert</th>
                 <th />
@@ -60,6 +63,9 @@ export function JourneysClient({ initial }: { initial: JourneyView[] }) {
                   <td>
                     <strong>{j.name}</strong>
                   </td>
+                  <td>
+                    <span className={`badge ${j.journeyType === "event" ? "badge-warn" : "badge-accent"}`}>{JOURNEY_TYPE_LABELS[j.journeyType]}</span>
+                  </td>
                   <td className="small" style={{ whiteSpace: "pre-wrap" }}>
                     {j.description || <span className="muted">–</span>}
                   </td>
@@ -69,7 +75,7 @@ export function JourneysClient({ initial }: { initial: JourneyView[] }) {
                       <button className="btn btn-sm" disabled={busy} onClick={() => setStepsOf(j)} title="Schritte dieser Journey verwalten">
                         Schritte ({j.stepCount})
                       </button>
-                      <button className="btn btn-sm" disabled={busy} onClick={() => setDraft({ id: j.id, name: j.name, description: j.description })}>
+                      <button className="btn btn-sm" disabled={busy} onClick={() => setDraft({ id: j.id, name: j.name, description: j.description, journeyType: j.journeyType })}>
                         Bearbeiten
                       </button>
                       <button
@@ -107,7 +113,7 @@ export function JourneysClient({ initial }: { initial: JourneyView[] }) {
         style={{ marginTop: 16 }}
         onSubmit={async (e) => {
           e.preventDefault();
-          const body = { name: draft.name, description: draft.description };
+          const body = { name: draft.name, description: draft.description, journeyType: draft.journeyType };
           const ok = await act(() => api(draft.id ? `${BASE}/${draft.id}` : BASE, { method: draft.id ? "PUT" : "POST", body }));
           if (ok) setDraft(EMPTY);
         }}
@@ -116,6 +122,16 @@ export function JourneysClient({ initial }: { initial: JourneyView[] }) {
         <label className="field">
           <span>Name</span>
           <input type="text" required maxLength={120} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Typ</span>
+          <select value={draft.journeyType} onChange={(e) => setDraft({ ...draft, journeyType: e.target.value as JourneyType })}>
+            {JOURNEY_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {JOURNEY_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="field">
           <span>Beschreibung</span>

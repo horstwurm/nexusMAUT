@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { MANUAL_SOURCE_NAME } from "@/lib/uploads";
 import { parsePosition } from "@/lib/positions";
 import { requireUser } from "@/lib/server/auth";
-import { attributeDefsOf, requireCustomerPosition, toPositionTransaction } from "@/lib/server/customers";
+import { attributeDefsOf, newExternalId, requireCustomerPosition, rethrowDuplicateId, toPositionTransaction } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { transactionInput } from "@/lib/server/schemas";
@@ -11,7 +11,7 @@ import { refreshTransaction } from "@/lib/server/serviceAttributes";
 // Transactions of a customer position: values of the transaction attributes
 // (productServiceTypeTrxAttributes) of the position's type.
 // GET  /api/customers/ID/positions/POS/transactions – list in order
-// POST /api/customers/ID/positions/POS/transactions { values: { TRX_ATTRIBUTE_ID: value } } – add
+// POST /api/customers/ID/positions/POS/transactions { externalId?, values: { TRX_ATTRIBUTE_ID: value } } – add
 
 type Ctx = { params: Promise<{ id: string; posId: string }> };
 
@@ -31,7 +31,7 @@ export const GET = route(async (_req: Request, ctx: Ctx) => {
 export const POST = route(async (req: Request, ctx: Ctx) => {
   await requireUser();
   const position = await positionOf(ctx);
-  const { values: input } = await readJson(req, transactionInput);
+  const { values: input, externalId } = await readJson(req, transactionInput);
   const defs = await attributeDefsOf(position.productServiceType, "trx");
   if (!defs.length) throw new HttpError(400, "Für diesen Typ sind keine Transaktionsattribute definiert");
   const parsed = parsePosition(defs, input);
@@ -43,6 +43,7 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     _id: new ObjectId(),
     positionId: position._id,
     customerId: position.customerId,
+    ...newExternalId(externalId),
     values: parsed.values,
     uploadName: MANUAL_SOURCE_NAME, // entered by hand
     uploadDate: now,
@@ -50,7 +51,7 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     createdAt: now,
     updatedAt: now,
   };
-  await positionTransactions.insertOne(doc);
+  await positionTransactions.insertOne(doc).catch((err) => rethrowDuplicateId(err, "Transaktion", externalId));
   await refreshTransaction(doc._id); // «Service» transaction attributes
   return Response.json(toPositionTransaction((await positionTransactions.findOne({ _id: doc._id }))!), { status: 201, headers: NO_STORE });
 });

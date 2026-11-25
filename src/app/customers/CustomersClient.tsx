@@ -11,7 +11,7 @@ import type { Customer, DomainValue, ServiceFetchedView } from "@/lib/types";
 import { AttrCell, AttrHeader, AttributeFields, formValues, type FormValue } from "./[id]/AttributeFields";
 import { CustomerPositionsPanel } from "./[id]/Positions";
 
-type Draft = { id: string | null; name: string; lastname: string; dateOfBirth: string; attributes: Record<string, FormValue>; fetched?: ServiceFetchedView };
+type Draft = { id: string | null; externalId: string; name: string; lastname: string; dateOfBirth: string; attributes: Record<string, FormValue>; fetched?: ServiceFetchedView };
 
 export function CustomersClient({
   types,
@@ -29,7 +29,7 @@ export function CustomersClient({
   customerAttributes: AttributeDef[];
   isAdmin: boolean;
 }) {
-  const EMPTY: Draft = { id: null, name: "", lastname: "", dateOfBirth: "", attributes: formValues(customerAttributes, {}) };
+  const EMPTY: Draft = { id: null, externalId: "", name: "", lastname: "", dateOfBirth: "", attributes: formValues(customerAttributes, {}) };
   const [list, setList] = useState<Customer[] | null>(null);
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +85,7 @@ export function CustomersClient({
   }, [load]);
 
   async function save(d: Draft) {
-    const body = { name: d.name, lastname: d.lastname, dateOfBirth: d.dateOfBirth, attributes: d.attributes };
+    const body = { externalId: d.externalId, name: d.name, lastname: d.lastname, dateOfBirth: d.dateOfBirth, attributes: d.attributes };
     await api(d.id ? `/api/customers/${d.id}` : "/api/customers", { method: d.id ? "PATCH" : "POST", body });
     setDraft(null);
     setInfo(d.id ? "Kunde gespeichert." : "Kunde angelegt.");
@@ -139,7 +139,7 @@ export function CustomersClient({
 
       <section className="card">
         <div className="row" style={{ marginBottom: 12 }}>
-          <input type="search" className="grow" placeholder="Suchen (Vor- oder Nachname)" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 360 }} />
+          <input type="search" className="grow" placeholder="Suchen (Vor-, Nachname oder ID)" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 360 }} />
           <span className="small muted">{list ? `${list.length}${list.length >= 200 ? "+" : ""} Kunden` : "Lädt …"}</span>
           {customerAttributes.some((a) => a.service) && (
             <span className="small muted" style={{ marginLeft: "auto" }}>
@@ -156,6 +156,7 @@ export function CustomersClient({
               <thead>
                 <tr>
                   <th style={{ width: 1 }} aria-label="Positionen aufklappen" />
+                  <th>ID</th>
                   <th>Nachname</th>
                   <th>Vorname</th>
                   <th>Geburtsdatum</th>
@@ -181,6 +182,7 @@ export function CustomersClient({
                           {open.has(c.id) ? "▾" : "▸"} {c.positionCount ?? 0}
                         </button>
                       </td>
+                      <td className="mono small">{c.externalId || <span className="muted">–</span>}</td>
                       <td>
                         <Link href={`/customers/${c.id}`}>
                           <strong>{c.lastname}</strong>
@@ -201,6 +203,7 @@ export function CustomersClient({
                           <button className="btn btn-sm" onClick={() =>
                               setDraft({
                                 id: c.id,
+                                externalId: c.externalId,
                                 name: c.name,
                                 lastname: c.lastname,
                                 dateOfBirth: c.dateOfBirth,
@@ -218,7 +221,7 @@ export function CustomersClient({
                     </tr>
                     {open.has(c.id) && (
                       <tr>
-                        <td colSpan={8 + customerAttributes.length} className="accordion-body">
+                        <td colSpan={9 + customerAttributes.length} className="accordion-body">
                           <CustomerPositionsPanel
                             key={version}
                             customerId={c.id}
@@ -258,7 +261,7 @@ function CustomerModal({
   const [d, setD] = useState(draft);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const set = (k: "name" | "lastname" | "dateOfBirth") => (e: React.ChangeEvent<HTMLInputElement>) => setD({ ...d, [k]: e.target.value });
+  const set = (k: "externalId" | "name" | "lastname" | "dateOfBirth") => (e: React.ChangeEvent<HTMLInputElement>) => setD({ ...d, [k]: e.target.value });
   const today = new Date().toISOString().slice(0, 10);
   return (
     <div className="modal-back" onClick={onClose}>
@@ -290,10 +293,16 @@ function CustomerModal({
             <input type="text" required value={d.lastname} onChange={set("lastname")} />
           </label>
         </div>
-        <label className="field" style={{ maxWidth: 220 }}>
-          <span>Geburtsdatum</span>
-          <input type="date" required min="1900-01-01" max={today} value={d.dateOfBirth} onChange={set("dateOfBirth")} />
-        </label>
+        <div className="grid2">
+          <label className="field">
+            <span>Geburtsdatum</span>
+            <input type="date" required min="1900-01-01" max={today} value={d.dateOfBirth} onChange={set("dateOfBirth")} />
+          </label>
+          <label className="field">
+            <span>ID</span>
+            <input type="text" className="mono" maxLength={60} value={d.externalId} onChange={set("externalId")} placeholder="z.B. Kundennummer (optional, eindeutig)" />
+          </label>
+        </div>
         {attributes.length > 0 && (
           <>
             <h3 style={{ marginTop: 6 }}>Kundenattribute</h3>

@@ -1,5 +1,6 @@
 import "server-only";
-import { UPDATE_FREQUENCIES } from "@/lib/events";
+import { ID_REFS, UPDATE_FREQUENCIES } from "@/lib/events";
+import { JOURNEY_TYPES } from "@/lib/journeyTypes";
 import { z } from "zod";
 import { dateOfBirthError } from "@/lib/customers";
 import { CODE_RE, type DomainName } from "@/lib/domains";
@@ -12,7 +13,11 @@ import { email } from "./http";
 
 // Request body schemas shared by several routes.
 
+/** «ID» of a customer / position / transaction: omitted = keep, "" = remove. */
+const externalId = z.string().trim().max(60, "ID: höchstens 60 Zeichen").optional();
+
 export const customerInput = z.object({
+  externalId,
   /** customer attribute id → raw value; omitted = keep the stored values */
   attributes: z.record(z.string().max(40), z.unknown()).optional(),
   name: z.string().trim().min(1, "Vorname fehlt").max(100),
@@ -79,10 +84,11 @@ export const sourcedAttributeInput = z
   });
 
 /** A transaction: trx attribute id → raw value (checked against the position type's transaction attributes). */
-export const transactionInput = z.object({ values: z.record(z.string().max(40), z.unknown()) });
+export const transactionInput = z.object({ externalId, values: z.record(z.string().max(40), z.unknown()) });
 
 /** A customer position: type + attribute id → raw value (checked against the type's position attributes by `parsePosition`). */
 export const customerPositionInput = z.object({
+  externalId,
   productServiceType: z.string().trim().min(1, "Typ fehlt").max(40),
   values: z.record(z.string().max(40), z.unknown()),
 });
@@ -166,6 +172,7 @@ export const eventInput = z.object({
   description: z.string().trim().max(2000).default(""),
   serviceId: z.string("Trigger-Service wählen").regex(/^[0-9a-f]{24}$/, "Trigger-Service wählen"),
   updateFrequency: z.enum(UPDATE_FREQUENCIES, "Aktualisierung wählen"),
+  idRef: z.enum(ID_REFS, "ID-Bezug wählen").default("customer"),
   journeyId: z.string("Journey wählen").regex(/^[0-9a-f]{24}$/, "Journey wählen"),
 });
 
@@ -190,6 +197,7 @@ export const testMailInput = z.object({ to: email });
 export const journeyInput = z.object({
   name: z.string().trim().min(1, "Name fehlt").max(120),
   description: z.string().trim().max(2000).default(""),
+  journeyType: z.enum(JOURNEY_TYPES, "Journey-Typ wählen").default("campaign"),
 });
 
 /** A step of a journey: an action and its content (free text). */

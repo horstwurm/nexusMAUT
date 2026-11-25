@@ -111,7 +111,7 @@ type Plan = {
   customerAttrs: Def[];
   customers: { key: string; name: string; lastname: string; dob: string; values: Record<string, PositionValue> }[];
   positions: { key: string; customerKey: string; type: string; values: Record<string, PositionValue> }[];
-  transactions: { positionKey: string; values: Record<string, PositionValue> }[];
+  transactions: { key: string; positionKey: string; values: Record<string, PositionValue> }[];
   products: { customerKey: string; type: string; name: string }[];
 };
 
@@ -273,8 +273,11 @@ export async function planUpload(src: { source: UploadSource; files: string[]; d
 
   // -- transactions
   const transactions: Plan["transactions"] = [];
+  const trxKeys = new Set<string>();
   for (const t of data.transactions) {
     const label = where("Transaktionen", t.row, t.key);
+    if (t.key && trxKeys.has(t.key)) err(`${label}: Transaktionsnummer doppelt`);
+    if (t.key) trxKeys.add(t.key);
     const type = positionKeys.get(t.positionKey);
     if (!type) {
       err(`${label}: Positionsnummer «${t.positionKey}» gibt es in den Positionen nicht`);
@@ -282,7 +285,7 @@ export async function planUpload(src: { source: UploadSource; files: string[]; d
     }
     const values = parseValues(types.get(type)!.trx, t.values, label, (k) => `Typ «${type}» hat kein Transaktionsattribut «${k}»`);
     if (!Object.keys(values).length) err(`${label}: mindestens ein Wert ist nötig`);
-    transactions.push({ positionKey: t.positionKey, values });
+    transactions.push({ key: t.key, positionKey: t.positionKey, values });
   }
 
   // -- what gets deleted / stays
@@ -295,9 +298,26 @@ export async function planUpload(src: { source: UploadSource; files: string[]; d
 
   const attributesDeleted = [...types.values()].reduce((s, t) => s + t.deleteIds.position.length + t.deleteIds.trx.length, 0);
   const byUpload = !opts.deleteCustomers && opts.deleteUploads.length ? await uploadDeletion(opts.deleteUploads) : null;
+
+  // -- «ID»s (kundennummer / positionsnummer / transaktionsnummer) must not be taken by records that stay
+  if (!opts.deleteCustomers) {
+    const taken = async <T extends { _id: ObjectId; externalId?: string }>(
+      col: { find: (f: object, o: object) => { limit: (n: number) => { toArray: () => Promise<T[]> } } },
+      keys: string[],
+      keep: object,
+    ) => (keys.length ? (await col.find({ externalId: { $in: keys }, ...keep }, { projection: { externalId: 1 } }).limit(MAX_ERRORS).toArray()).map((d) => d.externalId!) : []);
+    const [cuTaken, posTaken, trxTaken] = await Promise.all([
+      taken(c.customers, [...customerKeys], byUpload ? { _id: { $nin: byUpload.customerIds } } : {}),
+      taken(c.customerPositions, [...positionKeys.keys()], byUpload ? { _id: { $nin: byUpload.positionIds } } : {}),
+      taken(c.positionTransactions, [...trxKeys], byUpload ? { $nor: [byUpload.trxFilter] } : {}),
+    ]);
+    for (const k of cuTaken) err(`Kunden: Kundennummer «${k}» gibt es schon als ID eines bestehenden Kunden`);
+    for (const k of posTaken) err(`Positionen: Positionsnummer «${k}» gibt es schon als ID einer bestehenden Position`);
+    for (const k of trxTaken) err(`Transaktionen: Transaktionsnummer «${k}» gibt es schon als ID einer bestehenden Transaktion`);
+  }
   const remaining = existingCustomers - (byUpload?.counts.customers ?? 0);
   if (!opts.deleteCustomers && remaining > 0)
-    warnings.push(`${remaining} bestehende Kunden bleiben; die Quelle legt ${customers.length} weitere an – ohne Abgleich (gleiche Kunden wären doppelt).`);
+    warnings.push(`${remaining} bestehende Kunden bleiben; die Quelle legt ${customers.length} weitere an – ohne Abgleich (Kundennummern, die es als ID schon gibt, werden als Fehler gemeldet).`);
   if (attributesDeleted && !opts.deleteCustomers)
     warnings.push("Die Werte gelöschter Attribute verschwinden auch bei den bestehenden Positionen und Transaktionen; Kunden Selektionen auf diesen Attributen treffen danach nicht mehr.");
 
@@ -471,7 +491,17 @@ export async function runUpload(
     const _id = new ObjectId();
     if (cu.key) customerIds.set(cu.key, _id);
     const attributes = byId(plan.customerAttrs, cu.values);
-    return { _id, name: cu.name, lastname: cu.lastname, dateOfBirth: dayToDb(cu.dob), ...(Object.keys(attributes).length && { attributes }), ...origin, createdAt: now, updatedAt: now };
+    return {
+      _id,
+      ...(cu.key && { externalId: cu.key }),
+      name: cu.name,
+      lastname: cu.lastname,
+      dateOfBirth: dayToDb(cu.dob),
+      ...(Object.keys(attributes).length && { attributes }),
+      ...origin,
+      createdAt: now,
+      updatedAt: now,
+    };
   });
   const positionIds = new Map<string, { _id: ObjectId; customerId: ObjectId }>();
   const posSort = new Map<string, number>();
@@ -481,7 +511,17 @@ export async function runUpload(
     if (p.key) positionIds.set(p.key, { _id, customerId });
     const sort = (posSort.get(p.customerKey) ?? 0) + 10;
     posSort.set(p.customerKey, sort);
-    return { _id, customerId, productServiceType: p.type, values: byId(typeOf.get(p.type)!.position, p.values), ...origin, sort, createdAt: now, updatedAt: now };
+    return {
+      _id,
+      customerId,
+      ...(p.key && { externalId: p.key }),
+      productServiceType: p.type,
+      values: byId(typeOf.get(p.type)!.position, p.values),
+      ...origin,
+      sort,
+      createdAt: now,
+      updatedAt: now,
+    };
   });
   const trxSort = new Map<string, number>();
   const trxDocs: PositionTransactionDoc[] = plan.transactions.map((t) => {
@@ -489,7 +529,17 @@ export async function runUpload(
     const type = plan.positions.find((p) => p.key === t.positionKey)!.type;
     const sort = (trxSort.get(t.positionKey) ?? 0) + 10;
     trxSort.set(t.positionKey, sort);
-    return { _id: new ObjectId(), positionId: pos._id, customerId: pos.customerId, values: byId(typeOf.get(type)!.trx, t.values), ...origin, sort, createdAt: now, updatedAt: now };
+    return {
+      _id: new ObjectId(),
+      positionId: pos._id,
+      customerId: pos.customerId,
+      ...(t.key && { externalId: t.key }),
+      values: byId(typeOf.get(type)!.trx, t.values),
+      ...origin,
+      sort,
+      createdAt: now,
+      updatedAt: now,
+    };
   });
   const productDocs = plan.products.map((p) => ({ _id: new ObjectId(), customerId: customerIds.get(p.customerKey)!, name: p.name, productServiceType: p.type, createdAt: now, updatedAt: now }));
 

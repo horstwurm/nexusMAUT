@@ -9,7 +9,6 @@ import { authSettingsView } from "@/lib/server/authSettings";
 import { collections } from "@/lib/server/db";
 import { domainValues, toAdminDomainValue, toTypeAttribute } from "@/lib/server/domains";
 import { listEvents } from "@/lib/server/events";
-import { eventTimerEnabled } from "@/lib/server/eventTimer";
 import { listJourneys } from "@/lib/server/journeys";
 import { mailSettingsView } from "@/lib/server/mailSettings";
 import { listServices } from "@/lib/server/services";
@@ -106,7 +105,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 </>
               ),
             },
-            { id: "events", label: "Events", count: events.length, content: <EventsAdmin initial={events} services={services} journeys={journeys} timerOn={eventTimerEnabled()} /> },
+            { id: "events", label: "Events", count: events.length, content: <EventsAdmin initial={events} services={services} journeys={journeys} /> },
             {
               id: "users",
               label: "Benutzer",

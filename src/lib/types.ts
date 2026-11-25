@@ -1,4 +1,5 @@
-import type { UpdateFrequency } from "@/lib/events";
+import type { IdRef, UpdateFrequency } from "@/lib/events";
+import type { JourneyType } from "@/lib/journeyTypes";
 import type { MappedValue } from "@/lib/serviceCall";
 import type { UploadSource } from "@/lib/uploads";
 import type { StepStatus } from "@/lib/stepStatus";
@@ -12,6 +13,8 @@ export type Me = { id: string; email: string; name: string; role: "admin" | "edi
 
 export type Customer = {
   id: string;
+  /** «ID» (own key, unique), "" = none */
+  externalId: string;
   name: string;
   lastname: string;
   /** YYYY-MM-DD */
@@ -71,6 +74,8 @@ export type CustomerProduct = {
 
 export type PositionTransaction = {
   id: string;
+  /** «ID» (own key, unique), "" = none */
+  externalId: string;
   positionId: string;
   /** trx attribute id → value (string | number | boolean) */
   values: Record<string, string | number | boolean>;
@@ -86,6 +91,8 @@ export type PositionTransaction = {
 
 export type CustomerPosition = {
   id: string;
+  /** «ID» (own key, unique), "" = none */
+  externalId: string;
   customerId: string;
   /** number of transactions (lists) */
   transactionCount?: number;
@@ -142,6 +149,7 @@ export type JourneyView = {
   id: string;
   name: string;
   description: string;
+  journeyType: JourneyType;
   updatedAt: string;
   /** number of steps */
   stepCount: number;
@@ -192,7 +200,7 @@ export type CustomerJourneyView = {
   journeyId: string;
   journeyName: string;
   status: CustomerJourneyStatus;
-  source: { kind: "manual" } | { kind: "rule"; ruleId: string; ruleName: string };
+  source: { kind: "manual" } | { kind: "rule"; ruleId: string; ruleName: string } | { kind: "event"; eventId: string; eventName: string };
   startedAt: string;
   completedAt: string | null;
   progress: { done: number; skipped: number; total: number };
@@ -264,12 +272,16 @@ export type EventView = {
   /** false when the service isn't a trigger service (any more) */
   serviceIsTrigger: boolean;
   updateFrequency: UpdateFrequency;
+  /** what the IDs in the service's answer refer to */
+  idRef: IdRef;
   /** null on events from before the field existed */
   journeyId: string | null;
   /** null when there is none or it is gone */
   journeyName: string | null;
   /** latest call of the trigger service, null = never called */
   lastCall: EventCallView | null;
+  /** latest «Journeys starten», null = never */
+  lastStart: { at: string; byName: string; numbers: number; created: number; skipped: number; unknown: string[] } | null;
   updatedAt: string;
 };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AttributeDef } from "./positions";
-import { buildRequest, isCustomerNumberAttribute, isUnavailable, listSpecProblem, mapResponse, mockResponse, randomResponse, usesCustomerNumbers, type ServiceAttrDef } from "./serviceCall";
+import { buildRequest, isCustomerNumberAttribute, isIdAttribute, isUnavailable, listSpecProblem, mapResponse, mockResponse, randomResponse, usesCustomerNumbers, type ServiceAttrDef } from "./serviceCall";
 
 const def = (id: string, attribute: string, attributeType: AttributeDef["attributeType"], options: string[] = []): AttributeDef => ({
   id,
@@ -173,7 +173,7 @@ describe("randomResponse with customer numbers", () => {
   });
   it("takes them from the given customers, other text stays random", () => {
     for (let i = 0; i < 20; i++) {
-      const json = randomResponse(defs, "2026-11-24", Math.random, ids) as { Kundennummer: string; Hypothek: string; Treffer: { "Kunden-Nr.": string }[] };
+      const json = randomResponse(defs, "2026-11-24", Math.random, { kind: "customer", values: ids }) as { Kundennummer: string; Hypothek: string; Treffer: { "Kunden-Nr.": string }[] };
       expect(ids).toContain(json.Kundennummer);
       expect(ids).not.toContain(json.Hypothek);
       // the rows use different customers as long as there are enough
@@ -183,5 +183,25 @@ describe("randomResponse with customer numbers", () => {
   });
   it("random text without customers", () => {
     expect(["c1", "c2", "c3"]).not.toContain((randomResponse(defs) as { Kundennummer: string }).Kundennummer);
+  });
+});
+
+describe("isIdAttribute per kind", () => {
+  it("knows position and transaction numbers", () => {
+    expect(["Positionsnummer", "Positions-Nr.", "positionId"].every((n) => isIdAttribute("position", n))).toBe(true);
+    expect(["Transaktionsnummer", "Transaktions-ID", "trx_id"].every((n) => isIdAttribute("transaction", n))).toBe(true);
+    expect(isIdAttribute("position", "Kundennummer")).toBe(false);
+    expect(isIdAttribute("customer", "Positionsnummer")).toBe(false);
+    // a plain «ID» belongs to whichever kind is asked
+    expect(["customer", "position", "transaction"].every((k) => isIdAttribute(k as "customer", "ID"))).toBe(true);
+  });
+  it("mock answer fills the kind's attribute", () => {
+    const defs: ServiceAttrDef[] = [
+      { id: "1", attribute: "Positionsnummer", attributeType: "alpha", options: [] },
+      { id: "2", attribute: "Kundennummer", attributeType: "alpha", options: [] },
+    ];
+    const json = randomResponse(defs, "2026-11-25", Math.random, { kind: "position", values: ["P1"] }) as Record<string, string>;
+    expect(json.Positionsnummer).toBe("P1");
+    expect(json.Kundennummer).not.toBe("P1");
   });
 });

@@ -105,7 +105,9 @@ export function CustomerDetail({
             {customer.name} {customer.lastname}
           </h1>
           <p className="muted small" style={{ margin: 0 }}>
-            Geboren {formatDay(customer.dateOfBirth)} · ID <span className="mono">{customer.id}</span>
+            Geboren {formatDay(customer.dateOfBirth)} · ID{" "}
+            {customer.externalId ? <span className="mono">{customer.externalId}</span> : <span title="Keine ID erfasst">–</span>} · interne ID{" "}
+            <span className="mono">{customer.id}</span>
             {customer.uploadSource ? (
               <>
                 {" "}

@@ -107,7 +107,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
           const defs = attributesByType[code] ?? [];
           const trxDefs = trxAttributesByType[code] ?? [];
           const group = positions.filter((p) => p.productServiceType === code);
-          const cols = defs.length + (defs.length ? 0 : 1) + 5;
+          const cols = defs.length + (defs.length ? 0 : 1) + 6;
           return (
             <div key={code} style={{ marginBottom: 18 }}>
               <h4 style={{ margin: "0 0 6px" }}>
@@ -122,6 +122,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
                     <tr>
                       <th style={{ width: 1 }} aria-label="Transaktionen aufklappen" />
                       <th className="num">#</th>
+                      <th>ID</th>
                       {defs.map((d) => (
                         <AttrHeader key={d.id} def={d} />
                       ))}
@@ -145,6 +146,7 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
                             </button>
                           </td>
                           <td className="num muted">{i + 1}</td>
+                          <td className="mono small">{p.externalId || <span className="muted">–</span>}</td>
                           {defs.map((d) => (
                             <AttrCell key={d.id} def={d} value={p.values[d.id]} fetched={p.serviceFetched} />
                           ))}
@@ -210,14 +212,15 @@ export function Positions({ url, types, attributesByType, trxAttributesByType, p
           attributesByType={attributesByType}
           initialType={editing === "new" ? (choosable.length === 1 ? choosable[0].code : "") : editing.productServiceType}
           initialValues={editing === "new" ? {} : editing.values}
+          initialExternalId={editing === "new" ? "" : editing.externalId}
           originalType={editing === "new" ? undefined : editing.productServiceType}
           typeLocked={editing !== "new" && (editing.transactionCount ?? 0) > 0}
           fetched={editing === "new" ? undefined : editing.serviceFetched}
           onClose={() => setEditing(null)}
-          onSave={async (productServiceType, values) => {
+          onSave={async (productServiceType, values, externalId) => {
             await api(editing === "new" ? url : `${url}/${editing.id}`, {
               method: editing === "new" ? "POST" : "PUT",
-              body: { productServiceType, values },
+              body: { externalId, productServiceType, values },
             });
             setEditing(null);
             onChange(await api<CustomerPosition[]>(url));
@@ -289,6 +292,7 @@ export function PositionModal({
   attributesByType,
   initialType,
   initialValues,
+  initialExternalId = "",
   originalType,
   typeLocked,
   fetched,
@@ -300,6 +304,8 @@ export function PositionModal({
   attributesByType: AttributesByType;
   initialType: string;
   initialValues: Record<string, PositionValue>;
+  /** the position's «ID» */
+  initialExternalId?: string;
   /** the position's saved type – stays choosable even if inactive now */
   originalType?: string;
   /** the position has transactions: its type can't change */
@@ -307,9 +313,10 @@ export function PositionModal({
   /** when its «Service» attribute values were fetched */
   fetched?: ServiceFetchedView;
   onClose: () => void;
-  onSave: (productServiceType: string, values: Record<string, FormValue>) => Promise<void>;
+  onSave: (productServiceType: string, values: Record<string, FormValue>, externalId: string) => Promise<void>;
 }) {
   const [type, setType] = useState(initialType);
+  const [externalId, setExternalId] = useState(initialExternalId);
   // form values by attribute id – kept across type switches, only the chosen type's are sent
   const [values, setValues] = useState<Record<string, FormValue>>(() => formValues(Object.values(attributesByType).flat(), initialValues));
   const [error, setError] = useState<string | null>(null);
@@ -327,7 +334,7 @@ export function PositionModal({
           setBusy(true);
           setError(null);
           try {
-            await onSave(type, Object.fromEntries(defs.map((d) => [d.id, values[d.id] ?? null])));
+            await onSave(type, Object.fromEntries(defs.map((d) => [d.id, values[d.id] ?? null])), externalId);
           } catch (err) {
             setError(errorText(err));
             setBusy(false);
@@ -353,6 +360,10 @@ export function PositionModal({
           {typeLocked && <span className="hint">Der Typ ist fest, solange die Position Transaktionen hat.</span>}
         </label>
 
+        <label className="field">
+          <span>ID</span>
+          <input type="text" className="mono" maxLength={60} value={externalId} onChange={(e) => setExternalId(e.target.value)} placeholder="z.B. Positionsnummer (optional, eindeutig)" />
+        </label>
         {type && !defs.length && <Notice kind="warn">Dieser Typ hat keine Positionsattribute.</Notice>}
         <AttributeFields defs={defs} values={values} onChange={setValues} fetched={fetched} />
         {defs.length > 0 && <p className="small muted">Leere Felder bleiben leer; mindestens ein Wert ist nötig.</p>}

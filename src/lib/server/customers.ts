@@ -2,6 +2,7 @@ import "server-only";
 import type { ObjectId } from "mongodb";
 import { dayFromDb } from "@/lib/customers";
 import { parseAttributeValues, type AttributeDef } from "@/lib/positions";
+import type { IdKind } from "@/lib/serviceCall";
 import type { AttributeKind } from "@/lib/typeAttributes";
 import type { Customer, CustomerComPref, CustomerPosition, CustomerProduct, PositionTransaction } from "@/lib/types";
 import { collections, type ServiceFetched, type CustomerComPrefDoc, type CustomerDoc, type CustomerPositionDoc, type CustomerProductDoc, type PositionTransactionDoc } from "./db";
@@ -14,6 +15,7 @@ const fetchedView = (f: ServiceFetched) =>
 
 export const toCustomer = (c: CustomerDoc): Customer => ({
   id: c._id.toHexString(),
+  externalId: c.externalId ?? "",
   name: c.name,
   lastname: c.lastname,
   dateOfBirth: dayFromDb(c.dateOfBirth),
@@ -42,6 +44,26 @@ export const toCustomerComPref = (p: CustomerComPrefDoc): CustomerComPref => ({
   updatedAt: p.updatedAt.toISOString(),
 });
 
+/**
+ * The «ID» part of an update: omitted = unchanged, "" = removed, else set.
+ * Spread into the update document next to `$set` fields: `{ ...setWithId(fields, id) }`.
+ */
+export function setWithId<T extends object>(fields: T, externalId: string | undefined) {
+  if (externalId === undefined) return { $set: fields };
+  if (externalId === "") return { $set: fields, $unset: { externalId: "" as const } };
+  return { $set: { ...fields, externalId } };
+}
+
+/** The «ID» for a new record (none when empty). */
+export const newExternalId = (externalId: string | undefined) => (externalId ? { externalId } : {});
+
+/** 409 for a taken «ID» (unique index), else rethrows. */
+export function rethrowDuplicateId(err: unknown, what: "Kunden" | "Position" | "Transaktion", externalId: string | undefined): never {
+  if ((err as { code?: number }).code === 11000 && externalId)
+    throw new HttpError(409, `Die ID «${externalId}» gibt es schon bei ${what === "Kunden" ? "einem anderen Kunden" : what === "Position" ? "einer anderen Position" : "einer anderen Transaktion"}`);
+  throw err;
+}
+
 /** 404 unless the customer exists (parent of the relation routes). */
 export async function requireCustomer(id: ObjectId) {
   const { customers } = await collections();
@@ -52,6 +74,7 @@ export async function requireCustomer(id: ObjectId) {
 
 export const toCustomerPosition = (p: CustomerPositionDoc): CustomerPosition => ({
   id: p._id.toHexString(),
+  externalId: p.externalId ?? "",
   customerId: p.customerId.toHexString(),
   productServiceType: p.productServiceType,
   values: p.values,
@@ -65,6 +88,7 @@ export const toCustomerPosition = (p: CustomerPositionDoc): CustomerPosition => 
 
 export const toPositionTransaction = (t: PositionTransactionDoc): PositionTransaction => ({
   id: t._id.toHexString(),
+  externalId: t.externalId ?? "",
   positionId: t.positionId.toHexString(),
   values: t.values,
   ...(t.serviceFetched && { serviceFetched: fetchedView(t.serviceFetched) }),
@@ -118,11 +142,18 @@ export async function attributeDefsOf(typeCode: string, kind: AttributeKind = "p
 }
 
 /**
- * Ids of up to `n` randomly chosen customers – the customer numbers a «Mock»
- * service answers with (`randomResponse`). Empty without customers.
+ * «ID»s (externalId) of up to `n` randomly chosen customers / positions /
+ * transactions that have one – what a «Mock» service answers with
+ * (`randomResponse`). Only when no record of the kind has an ID: internal ids.
+ * Empty without records.
  */
-export async function sampleCustomerNumbers(n = 25) {
-  const { customers } = await collections();
-  const rows = await customers.aggregate<{ _id: ObjectId }>([{ $sample: { size: n } }, { $project: { _id: 1 } }]).toArray();
+export async function sampleIds(kind: IdKind, n = 25) {
+  const c = await collections();
+  const col = (kind === "customer" ? c.customers : kind === "position" ? c.customerPositions : c.positionTransactions) as typeof c.customers;
+  const withId = await col
+    .aggregate<{ externalId: string }>([{ $match: { externalId: { $type: "string" } } }, { $sample: { size: n } }, { $project: { _id: 0, externalId: 1 } }])
+    .toArray();
+  if (withId.length) return withId.map((r) => r.externalId);
+  const rows = await col.aggregate<{ _id: ObjectId }>([{ $sample: { size: n } }, { $project: { _id: 1 } }]).toArray();
   return rows.map((r) => r._id.toHexString());
 }

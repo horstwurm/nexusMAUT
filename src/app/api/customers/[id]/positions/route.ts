@@ -2,7 +2,7 @@ import { ObjectId } from "mongodb";
 import { MANUAL_SOURCE_NAME } from "@/lib/uploads";
 import { parsePosition } from "@/lib/positions";
 import { requireUser } from "@/lib/server/auth";
-import { attributeDefsOf, requireCustomer, toCustomerPosition, toCustomerPositions } from "@/lib/server/customers";
+import { attributeDefsOf, newExternalId, requireCustomer, rethrowDuplicateId, toCustomerPosition, toCustomerPositions } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { assertDomainValue } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
@@ -12,7 +12,7 @@ import { refreshPosition } from "@/lib/server/serviceAttributes";
 // Positions of a customer: a product/service type and values of that type's
 // position attributes (productServiceTypePositionAttributes).
 // GET  /api/customers/ID/positions – list in order, with transactionCount
-// POST /api/customers/ID/positions { productServiceType, values: { ATTRIBUTE_ID: value } } – add
+// POST /api/customers/ID/positions { externalId?, productServiceType, values: { ATTRIBUTE_ID: value } } – add
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -27,7 +27,7 @@ export const GET = route(async (_req: Request, ctx: Ctx) => {
 export const POST = route(async (req: Request, ctx: Ctx) => {
   await requireUser();
   const customer = await requireCustomer(parseId((await ctx.params).id));
-  const { productServiceType, values: input } = await readJson(req, customerPositionInput);
+  const { productServiceType, values: input, externalId } = await readJson(req, customerPositionInput);
   await assertDomainValue("productServiceType", productServiceType);
   const defs = await attributeDefsOf(productServiceType);
   if (!defs.length) throw new HttpError(400, "Für diesen Typ sind keine Positionsattribute definiert");
@@ -39,6 +39,7 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
   const doc = {
     _id: new ObjectId(),
     customerId: customer._id,
+    ...newExternalId(externalId),
     productServiceType,
     values: parsed.values,
     uploadName: MANUAL_SOURCE_NAME, // entered by hand
@@ -47,7 +48,7 @@ export const POST = route(async (req: Request, ctx: Ctx) => {
     createdAt: now,
     updatedAt: now,
   };
-  await customerPositions.insertOne(doc);
+  await customerPositions.insertOne(doc).catch((err) => rethrowDuplicateId(err, "Position", externalId));
   await refreshPosition(doc._id); // «Service» position attributes
   return Response.json({ ...toCustomerPosition((await customerPositions.findOne({ _id: doc._id }))!), transactionCount: 0 }, { status: 201, headers: NO_STORE });
 });

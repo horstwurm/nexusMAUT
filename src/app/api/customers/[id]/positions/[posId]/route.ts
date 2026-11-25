@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { parsePosition } from "@/lib/positions";
 import { requireUser } from "@/lib/server/auth";
-import { attributeDefsOf, toCustomerPosition } from "@/lib/server/customers";
+import { attributeDefsOf, rethrowDuplicateId, setWithId, toCustomerPosition } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { assertDomainValue } from "@/lib/server/domains";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { customerPositionInput } from "@/lib/server/schemas";
 import { refreshPosition } from "@/lib/server/serviceAttributes";
 
-// PUT    /api/customers/ID/positions/POS { productServiceType, values } – replace (a new
+// PUT    /api/customers/ID/positions/POS { externalId?, productServiceType, values } – replace (a new
 //        type is fine while there are no transactions: the values are checked against its attributes)
 // PATCH  /api/customers/ID/positions/POS { sort } – reorder
 // DELETE /api/customers/ID/positions/POS – with its transactions
@@ -23,7 +23,7 @@ async function filterOf(ctx: Ctx) {
 export const PUT = route(async (req: Request, ctx: Ctx) => {
   await requireUser();
   const filter = await filterOf(ctx);
-  const { productServiceType, values: input } = await readJson(req, customerPositionInput);
+  const { productServiceType, values: input, externalId } = await readJson(req, customerPositionInput);
   const { customerPositions } = await collections();
   const before = await customerPositions.findOne(filter);
   if (!before) throw new HttpError(404, "Nicht gefunden");
@@ -36,11 +36,9 @@ export const PUT = route(async (req: Request, ctx: Ctx) => {
   }
   const parsed = parsePosition(await attributeDefsOf(productServiceType), input);
   if ("error" in parsed) throw new HttpError(400, parsed.error);
-  const doc = await customerPositions.findOneAndUpdate(
-    filter,
-    { $set: { productServiceType, values: parsed.values, updatedAt: new Date() } },
-    { returnDocument: "after" },
-  );
+  const doc = await customerPositions
+    .findOneAndUpdate(filter, setWithId({ productServiceType, values: parsed.values, updatedAt: new Date() }, externalId), { returnDocument: "after" })
+    .catch((err) => rethrowDuplicateId(err, "Position", externalId));
   if (!doc) throw new HttpError(404, "Nicht gefunden");
   await refreshPosition(doc._id); // «Service» position attributes
   return Response.json(toCustomerPosition((await customerPositions.findOne({ _id: doc._id }))!), { headers: NO_STORE });

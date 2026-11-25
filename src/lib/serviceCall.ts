@@ -231,24 +231,25 @@ export function randomValue(name: string, type: AttributeType, options: string[]
 /**
  * A random answer (service with «Mock» switched on – it isn't called): one
  * random value per GET attribute, lists 1 – 5 random rows (at their path).
- * Text attributes named like a customer number («Kundennummer», «KundenNr»,
- * «KundenId», «customerId» …) get one of `customerNumbers` (ids of real
- * customers) when given – different ones per list row as far as there are.
+ * Text attributes named like an ID of `ids.kind` («Kundennummer», «Positionsnummer»,
+ * «Transaktionsnummer», «KundenId», «customerId» … – `isIdAttribute`) get one of
+ * `ids.values` (IDs of real records) when given – different ones per list row as
+ * far as there are.
  */
 export function randomResponse(
   getDefs: ServiceAttrDef[],
   today = new Date().toISOString().slice(0, 10),
   rnd: () => number = Math.random,
-  customerNumbers: string[] = [],
+  ids: { kind: IdKind; values: string[] } = { kind: "customer", values: [] },
 ): Obj {
   let pool: string[] = [];
-  /** a customer number not used yet in this answer (refilled when all are used) */
-  const nextNumber = () => {
-    if (!pool.length) pool = [...customerNumbers];
+  /** an ID not used yet in this answer (refilled when all are used) */
+  const nextId = () => {
+    if (!pool.length) pool = [...ids.values];
     return pool.splice(Math.floor(rnd() * pool.length), 1)[0];
   };
   const value = (name: string, type: AttributeType, options: string[]) =>
-    customerNumbers.length && type === "alpha" && isCustomerNumberAttribute(name) ? nextNumber() : randomValue(name, type, options, today, rnd);
+    ids.values.length && type === "alpha" && isIdAttribute(ids.kind, name) ? nextId() : randomValue(name, type, options, today, rnd);
   const out: Obj = {};
   for (const d of getDefs) {
     if (d.list) {
@@ -262,16 +263,35 @@ export function randomResponse(
   return out;
 }
 
-const CUSTOMER_NUMBER_NAMES = new Set(["kundennummer", "kundennr", "kundenid", "kundeid", "kunde", "customerid", "customernumber", "customerno", "customer"]);
+/** The records an ID can belong to (event `idRef`). */
+export type IdKind = "customer" | "position" | "transaction";
 
-/** «Kundennummer», «Kunden-Nr.», «KundenId», «customer_id» … (case, spaces and punctuation ignored). */
-export const isCustomerNumberAttribute = (name: string) => CUSTOMER_NUMBER_NAMES.has(name.toLowerCase().replace(/[^a-z]/g, ""));
+const ID_NAMES: Record<IdKind, Set<string>> = {
+  customer: new Set(["kundennummer", "kundennr", "kundenid", "kundeid", "kunde", "customerid", "customernumber", "customerno", "customer"]),
+  position: new Set(["positionsnummer", "positionsnr", "positionsid", "positionid", "position", "positionnumber", "positionno"]),
+  transaction: new Set(["transaktionsnummer", "transaktionsnr", "transaktionsid", "transaktionid", "transaktion", "transactionid", "transactionnumber", "transactionno", "transaction", "trxid"]),
+};
+
+/**
+ * «Kundennummer», «Kunden-Nr.», «Positions-ID», «transaction_id» … for the kind (case, spaces and
+ * punctuation ignored); a plain «ID» counts for whichever kind is asked (the event's ID-Bezug).
+ */
+export const isIdAttribute = (kind: IdKind, name: string) => {
+  const n = name.toLowerCase().replace(/[^a-z]/g, "");
+  return n === "id" || ID_NAMES[kind].has(n);
+};
+
+/** «Kundennummer», «Kunden-Nr.», «KundenId», «customer_id» … */
+export const isCustomerNumberAttribute = (name: string) => isIdAttribute("customer", name);
+
+/** Does a random answer for these GET attributes use IDs of the kind? */
+export const usesIds = (kind: IdKind, getDefs: ServiceAttrDef[]) =>
+  getDefs.some((d) =>
+    d.list ? d.list.columns.some((c) => c.attributeType === "alpha" && isIdAttribute(kind, c.attribute)) : d.attributeType === "alpha" && isIdAttribute(kind, d.attribute),
+  );
 
 /** Does a random answer for these GET attributes use customer numbers? */
-export const usesCustomerNumbers = (getDefs: ServiceAttrDef[]) =>
-  getDefs.some((d) =>
-    d.list ? d.list.columns.some((c) => c.attributeType === "alpha" && isCustomerNumberAttribute(c.attribute)) : d.attributeType === "alpha" && isCustomerNumberAttribute(d.attribute),
-  );
+export const usesCustomerNumbers = (getDefs: ServiceAttrDef[]) => usesIds("customer", getDefs);
 
 /** «Not available»: no answer at all, 404 (endpoint missing) or a server error (5xx). */
 export const isUnavailable = (status: number | null) => status === null || status === 404 || status >= 500;

@@ -19,7 +19,7 @@ export function AppHome({ me, today }: { me: Me; today: Today }) {
     {
       href: "/customer-journeys",
       icon: "route",
-      title: "KundenJourneys (Kampagnen)",
+      title: "Kunden Journeys",
       text: "Journeys zuweisen und Kunden begleiten",
       badge: today.dataErrors || today.openSteps,
       badgeAlert: today.dataErrors > 0,

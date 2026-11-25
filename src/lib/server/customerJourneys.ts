@@ -37,7 +37,12 @@ export async function toCustomerJourneyViews(list: CustomerJourneyDoc[]): Promis
     journeyId: x.journeyId.toHexString(),
     journeyName: jName.get(x.journeyId.toHexString()) ?? "(gelöschte Journey)",
     status: x.status,
-    source: x.source.kind === "rule" ? { kind: "rule", ruleId: x.source.ruleId.toHexString(), ruleName: x.source.ruleName } : { kind: "manual" },
+    source:
+      x.source.kind === "rule"
+        ? { kind: "rule", ruleId: x.source.ruleId.toHexString(), ruleName: x.source.ruleName }
+        : x.source.kind === "event"
+          ? { kind: "event", eventId: x.source.eventId.toHexString(), eventName: x.source.eventName }
+          : { kind: "manual" },
     startedAt: x.startedAt.toISOString(),
     completedAt: x.completedAt?.toISOString() ?? null,
     progress: progressOf(steps.filter((s) => s.customerJourneyId.equals(x._id))),
@@ -94,7 +99,14 @@ export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<Custo
  * Assigns a journey to customers (by id, or all matching a rule). Customers
  * with an active run of this journey are skipped. Returns the counts.
  */
-export async function assignJourney(p: { journeyId: ObjectId; customerIds?: ObjectId[]; ruleId?: ObjectId; userId: string }) {
+export async function assignJourney(p: {
+  journeyId: ObjectId;
+  customerIds?: ObjectId[];
+  ruleId?: ObjectId;
+  /** started by an event («Journeys starten») – kept as the runs' source */
+  event?: { id: ObjectId; name: string };
+  userId: string;
+}) {
   const c = await collections();
   const journey = await c.journeys.findOne({ _id: p.journeyId });
   if (!journey) throw new HttpError(404, "Journey nicht gefunden");
@@ -112,7 +124,7 @@ export async function assignJourney(p: { journeyId: ObjectId; customerIds?: Obje
     const ids = p.customerIds ?? [];
     customerIds = (await c.customers.find({ _id: { $in: ids } }, { projection: { _id: 1 } }).toArray()).map((x) => x._id);
     if (customerIds.length !== new Set(ids.map((i) => i.toHexString())).size) throw new HttpError(400, "Unbekannter Kunde in der Auswahl");
-    source = { kind: "manual" };
+    source = p.event ? { kind: "event", eventId: p.event.id, eventName: p.event.name } : { kind: "manual" };
   }
 
   const active = new Set(

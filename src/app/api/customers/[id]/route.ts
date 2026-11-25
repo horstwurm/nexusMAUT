@@ -1,13 +1,13 @@
 import { dayToDb } from "@/lib/customers";
 import { requireUser } from "@/lib/server/auth";
-import { parseCustomerAttributes, toCustomer } from "@/lib/server/customers";
+import { parseCustomerAttributes, rethrowDuplicateId, setWithId, toCustomer } from "@/lib/server/customers";
 import { collections } from "@/lib/server/db";
 import { HttpError, NO_STORE, parseId, readJson, route } from "@/lib/server/http";
 import { customerInput } from "@/lib/server/schemas";
 import { refreshCustomer } from "@/lib/server/serviceAttributes";
 
 // GET    /api/customers/ID – one customer
-// PATCH  /api/customers/ID – change { name, lastname, dateOfBirth, attributes? } (attributes omitted = kept)
+// PATCH  /api/customers/ID – change { externalId?, name, lastname, dateOfBirth, attributes? } (attributes / externalId omitted = kept, externalId "" = removed)
 // DELETE /api/customers/ID – remove
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -24,20 +24,17 @@ export const GET = route(async (_req: Request, ctx: Ctx) => {
 export const PATCH = route(async (req: Request, ctx: Ctx) => {
   await requireUser();
   const id = parseId((await ctx.params).id);
-  const { attributes, ...input } = await readJson(req, customerInput);
+  const { attributes, externalId, ...input } = await readJson(req, customerInput);
   const { customers } = await collections();
-  const doc = await customers.findOneAndUpdate(
-    { _id: id },
-    {
-      $set: {
-        ...input,
-        dateOfBirth: dayToDb(input.dateOfBirth),
-        ...(attributes && { attributes: await parseCustomerAttributes(attributes) }),
-        updatedAt: new Date(),
-      },
-    },
-    { returnDocument: "after" },
-  );
+  const fields = {
+    ...input,
+    dateOfBirth: dayToDb(input.dateOfBirth),
+    ...(attributes && { attributes: await parseCustomerAttributes(attributes) }),
+    updatedAt: new Date(),
+  };
+  const doc = await customers
+    .findOneAndUpdate({ _id: id }, setWithId(fields, externalId), { returnDocument: "after" })
+    .catch((err) => rethrowDuplicateId(err, "Kunden", externalId));
   if (!doc) throw new HttpError(404, "Nicht gefunden");
   await refreshCustomer(id); // «Service» customer attributes (the PUT values may have changed)
   return Response.json(toCustomer((await customers.findOne({ _id: id }))!), { headers: NO_STORE });

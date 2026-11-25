@@ -10,11 +10,11 @@ import { MappedTable, prettyJson } from "@/app/admin/ServiceCallModal";
 import { ExecuteModal } from "./ExecuteModal";
 import { FeedbackApiModal } from "./FeedbackApiModal";
 import { STEP_STATUSES, STEP_STATUS_INFO, type StepStatus } from "@/lib/stepStatus";
-import { UPDATE_FREQUENCY_LABELS } from "@/lib/events";
-import { nextDueAt } from "@/lib/eventSchedule";
+import { ID_REF_LABELS, UPDATE_FREQUENCY_LABELS } from "@/lib/events";
+import type { JourneyType } from "@/lib/journeyTypes";
 import type { Customer, CustomerFeedbackView, EventView, CustomerJourneyStatus, CustomerJourneyStepView, CustomerJourneyView, DataStatus } from "@/lib/types";
 
-type JourneyOption = { id: string; name: string; description: string; stepCount: number };
+type JourneyOption = { id: string; name: string; description: string; stepCount: number; journeyType: JourneyType };
 type RunCounts = { journeyId: string; active: number; done: number; cancelled: number };
 type RuleOption = { id: string; name: string; matchCount: number };
 type RunDetail = CustomerJourneyView & { steps: CustomerJourneyStepView[] };
@@ -36,35 +36,28 @@ export function CustomerJourneysClient({
   initialCounts,
   initialJourneyId,
   events: initialEvents,
-  initialEventId,
-  eventTimer,
 }: {
   journeys: JourneyOption[];
   rules: RuleOption[];
   initialCounts: RunCounts[];
   initialJourneyId: string | null;
+  /** the event definitions – shown with their Event journey */
   events: EventView[];
-  initialEventId: string | null;
-  /** the background timer for trigger services runs (EVENT_TIMER=on) */
-  eventTimer: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(initialJourneyId);
-  /** an event chosen in the «Events» panel – shown instead of the journey */
-  const [eventId, setEventId] = useState<string | null>(initialEventId);
   const [events, setEvents] = useState(initialEvents);
   const [counts, setCounts] = useState<RunCounts[]>(initialCounts);
+  /** bumped after «Journeys starten» so the run list reloads */
+  const [runsVersion, setRunsVersion] = useState(0);
   const journey = journeys.find((j) => j.id === selected) ?? null;
-  const event = events.find((e) => e.id === eventId) ?? null;
+  const campaigns = journeys.filter((j) => j.journeyType === "campaign");
+  const eventJourneys = journeys.filter((j) => j.journeyType === "event");
+  const journeyEvents = journey ? events.filter((e) => e.journeyId === journey.id) : [];
 
   const select = (id: string) => {
     setSelected(id);
-    setEventId(null);
     // keep the selection in the URL (reload / link)
     window.history.replaceState(null, "", `?journey=${id}`);
-  };
-  const selectEvent = (id: string) => {
-    setEventId(id);
-    window.history.replaceState(null, "", `?event=${id}`);
   };
   const refreshCounts = useCallback(async () => {
     try {
@@ -74,53 +67,56 @@ export function CustomerJourneysClient({
     }
   }, []);
 
+  /** one side panel: the journeys of one type with their run counts */
+  const panel = (label: string, head: string, list: JourneyOption[], empty: string) => (
+    <nav className="side-nav" aria-label={label}>
+      <div className="side-nav-head">{head}</div>
+      {list.length === 0 && <p className="small muted">{empty}</p>}
+      {list.map((j) => {
+        const c = counts.find((x) => x.journeyId === j.id);
+        const total = c ? c.active + c.done + c.cancelled : 0;
+        return (
+          <button key={j.id} className={`side-nav-item${j.id === selected ? " active" : ""}`} onClick={() => select(j.id)} aria-current={j.id === selected ? "page" : undefined}>
+            <span className="side-nav-name">{j.name}</span>
+            <span className="side-nav-count" title={c ? `${c.active} aktiv, ${c.done} abgeschlossen, ${c.cancelled} abgebrochen` : "Noch keinem Kunden zugewiesen"}>
+              {c?.active ?? 0} / {total}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+
   return (
     <div className="side-layout">
       <div className="side-col">
-        <nav className="side-nav" aria-label="Journeys">
-          <div className="side-nav-head">KundenJourneys (Kampagnen)</div>
-          {journeys.length === 0 && <p className="small muted">Noch keine Journeys – zuerst unter «Journeys» anlegen.</p>}
-          {journeys.map((j) => {
-            const c = counts.find((x) => x.journeyId === j.id);
-            const total = c ? c.active + c.done + c.cancelled : 0;
-            return (
-              <button
-                key={j.id}
-                className={`side-nav-item${!event && j.id === selected ? " active" : ""}`}
-                onClick={() => select(j.id)}
-                aria-current={!event && j.id === selected ? "page" : undefined}
-              >
-                <span className="side-nav-name">{j.name}</span>
-                <span className="side-nav-count" title={c ? `${c.active} aktiv, ${c.done} abgeschlossen, ${c.cancelled} abgebrochen` : "Noch keinem Kunden zugewiesen"}>
-                  {c?.active ?? 0} / {total}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
-        <nav className="side-nav" aria-label="Events">
-          <div className="side-nav-head">Events</div>
-          {events.length === 0 && <p className="small muted">Noch keine Events – unter Administration → Events anlegen.</p>}
-          {events.map((e) => (
-            <button
-              key={e.id}
-              className={`side-nav-item${e.id === eventId ? " active" : ""}`}
-              onClick={() => selectEvent(e.id)}
-              aria-current={e.id === eventId ? "page" : undefined}
-              title={e.serviceName ? `Trigger-Service: ${e.serviceName}` : undefined}
-            >
-              <span className="side-nav-name">{e.name}</span>
-              <span className="side-nav-count">{UPDATE_FREQUENCY_LABELS[e.updateFrequency] ?? e.updateFrequency}</span>
-            </button>
-          ))}
-        </nav>
+        {panel("Kampagnen", "Kunden Journeys", campaigns, "Noch keine Journeys vom Typ «Kampagne» – unter «Journeys» anlegen.")}
+        {panel("Events", "Events", eventJourneys, "Noch keine Journeys vom Typ «Event» – unter «Journeys» anlegen.")}
       </div>
 
       <div className="side-main">
-        {event ? (
-          <EventDetail event={event} eventTimer={eventTimer} onJourney={select} onChanged={(e) => setEvents(events.map((x) => (x.id === e.id ? e : x)))} />
-        ) : journey ? (
-          <JourneyRuns key={journey.id} journey={journey} rules={rules} onCountsChanged={refreshCounts} />
+        {journey ? (
+          <>
+            {journey.journeyType === "event" &&
+              (journeyEvents.length ? (
+                journeyEvents.map((e) => (
+                  <EventDetail
+                    key={e.id}
+                    event={e}
+                    onChanged={(x) => setEvents(events.map((y) => (y.id === x.id ? x : y)))}
+                    onStarted={async () => {
+                      setRunsVersion((v) => v + 1);
+                      await refreshCounts();
+                    }}
+                  />
+                ))
+              ) : (
+                <section className="card">
+                  <p className="empty">Diese Journey gehört noch zu keinem Event – unter Administration → Events zuordnen.</p>
+                </section>
+              ))}
+            <JourneyRuns key={`${journey.id}-${runsVersion}`} journey={journey} rules={rules} onCountsChanged={refreshCounts} />
+          </>
         ) : (
           <section className="card">
             <p className="empty">Links eine Journey wählen.</p>
@@ -131,30 +127,41 @@ export function CustomerJourneysClient({
   );
 }
 
-/** When the background timer calls the event's service next (from the last call). */
-function nextCallText(event: EventView, eventTimer: boolean) {
-  const next = nextDueAt(event.updateFrequency, event.lastCall ? new Date(event.lastCall.at) : null);
-  if (!next) return <span className="muted">nur von Hand («Service jetzt aufrufen»)</span>;
-  if (!eventTimer) return <span className="muted">nur von Hand – der automatische Zeitgeber ist ausgeschaltet</span>;
-  if (next.getTime() <= Date.now()) return "fällig – beim nächsten Durchgang des Zeitgebers (jede Minute)";
-  return `automatisch ab ${formatDate(next.toISOString(), true)}`;
-}
+const ID_REF_NUMBER = { customer: "Kundennummer", position: "Positionsnummer", transaction: "Transaktionsnummer" } as const;
 
 /** An event chosen in the «Events» panel: what it is and which trigger service reports it. */
 function EventDetail({
   event,
-  eventTimer,
-  onJourney,
   onChanged,
+  onStarted,
 }: {
   event: EventView;
-  eventTimer: boolean;
-  onJourney: (journeyId: string) => void;
   onChanged: (event: EventView) => void;
+  /** runs were created – reload the run list */
+  onStarted: () => Promise<void>;
 }) {
   const [calling, setCalling] = useState(false);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const call = event.lastCall;
+  const start = event.lastStart;
+  const canStart = Boolean(call?.values?.length) && !calling;
+
+  async function startJourneys() {
+    if (!window.confirm(`Journey für die Kunden aus dem letzten Service-Aufruf (${formatDate(call!.at, true)}) starten? Kunden mit einer aktiven KundenJourney werden übersprungen.`))
+      return;
+    setStarting(true);
+    setError(null);
+    try {
+      const updated = await api<EventView>(`/api/events/${event.id}/start`, { method: "POST" });
+      onChanged(updated);
+      if (updated.lastStart?.created) await onStarted();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setStarting(false);
+    }
+  }
 
   async function callNow() {
     setCalling(true);
@@ -187,32 +194,46 @@ function EventDetail({
             </>
           )}
         </dd>
-        <dt>Journey</dt>
-        <dd>
-          {event.journeyName && event.journeyId ? (
-            <button type="button" className="btn-link" onClick={() => onJourney(event.journeyId!)}>
-              {event.journeyName}
-            </button>
-          ) : (
-            <span className="muted">–</span>
-          )}
-        </dd>
         <dt>Aktualisierung</dt>
         <dd>
           <span className="badge badge-accent">{UPDATE_FREQUENCY_LABELS[event.updateFrequency] ?? event.updateFrequency}</span>
         </dd>
-        <dt>Nächster Aufruf</dt>
-        <dd>{nextCallText(event, eventTimer)}</dd>
+        <dt>ID-Bezug</dt>
+        <dd>{ID_REF_LABELS[event.idRef]}</dd>
         <dt>Geändert</dt>
         <dd>{formatDate(event.updatedAt)}</dd>
       </dl>
 
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 20 }}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", marginTop: 20 }}>
         <h3 style={{ margin: 0 }}>Letzter Service-Aufruf</h3>
-        <button className="btn btn-sm" disabled={calling || !event.serviceName} onClick={callNow}>
-          {calling ? "Wird aufgerufen …" : "Service jetzt aufrufen"}
-        </button>
+        {/* call first, then start the journeys for the customers it names */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+          <button className="btn btn-sm" disabled={calling || !event.serviceName} onClick={callNow}>
+            {calling ? "Wird aufgerufen …" : "Service jetzt aufrufen"}
+          </button>
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={!canStart || starting}
+            onClick={startJourneys}
+            title={canStart ? "Die Journey für die Kunden aus dem letzten Service-Aufruf starten" : "Zuerst den Trigger-Service aufrufen"}
+          >
+            {starting ? "Wird gestartet …" : "Journeys starten"}
+          </button>
+        </div>
       </div>
+      {start && (
+        <div className={`notice ${start.created ? "notice-ok" : "notice-warn"}`} role="status" style={{ marginTop: 12 }}>
+          Zuletzt gestartet {formatDate(start.at, true)} von {start.byName}: {start.numbers} {ID_REF_NUMBER[event.idRef]}
+          {start.numbers === 1 ? "" : "n"} im Service-Aufruf · <strong>{start.created} KundenJourney{start.created === 1 ? "" : "s"} gestartet</strong>
+          {start.skipped > 0 && <> · {start.skipped} übersprungen (schon aktiv)</>}
+          {start.unknown.length > 0 && (
+            <>
+              {" "}
+              · {start.unknown.length} unbekannt: <span className="mono small">{start.unknown.join(", ")}</span>
+            </>
+          )}
+        </div>
+      )}
       <Notice kind="error">{error}</Notice>
       {!call ? (
         <p className="empty">Der Trigger-Service wurde für dieses Event noch nie aufgerufen.</p>
@@ -325,16 +346,19 @@ function JourneyRuns({ journey, rules, onCountsChanged }: { journey: JourneyOpti
       <Notice kind="error">{error}</Notice>
       <Notice kind="ok">{info}</Notice>
 
-      <AssignForm
-        journey={journey}
-        rules={rules}
-        onAssigned={async (msg) => {
-          setInfo(msg);
-          setError(null);
-          await Promise.all([load(), onCountsChanged()]);
-        }}
-        onError={setError}
-      />
+      {/* Event journeys are started from their event («Journeys starten»), not assigned by hand */}
+      {journey.journeyType !== "event" && (
+        <AssignForm
+          journey={journey}
+          rules={rules}
+          onAssigned={async (msg) => {
+            setInfo(msg);
+            setError(null);
+            await Promise.all([load(), onCountsChanged()]);
+          }}
+          onError={setError}
+        />
+      )}
 
       <section className="card">
         <div className="row" style={{ marginBottom: 12 }}>
@@ -426,7 +450,7 @@ function JourneyRuns({ journey, rules, onCountsChanged }: { journey: JourneyOpti
                           <strong>{r.customerName}</strong>
                         </Link>
                       </td>
-                      <td className="small">{r.source.kind === "rule" ? `Selektion «${r.source.ruleName}»` : "einzeln"}</td>
+                      <td className="small">{r.source.kind === "rule" ? `Selektion «${r.source.ruleName}»` : r.source.kind === "event" ? `Event «${r.source.eventName}»` : "einzeln"}</td>
                       <td style={{ minWidth: 140 }}>
                         <Progress p={r.progress} />
                       </td>

@@ -1,5 +1,6 @@
 import "server-only";
-import type { UpdateFrequency } from "@/lib/events";
+import type { IdRef, UpdateFrequency } from "@/lib/events";
+import type { JourneyType } from "@/lib/journeyTypes";
 import type { MappedValue } from "@/lib/serviceCall";
 import { MongoClient, ObjectId, type Db } from "mongodb";
 import type { DomainName } from "@/lib/domains";
@@ -87,6 +88,8 @@ export type LoginStateDoc = {
 /** A customer: a person with name and birth date, independent of contacts. */
 export type CustomerDoc = {
   _id: ObjectId;
+  /** «ID»: the record's own key (e.g. Kundennummer from the source system), unique; missing = none */
+  externalId?: string;
   name: string;
   lastname: string;
   /** Calendar day as UTC midnight */
@@ -169,6 +172,8 @@ export type CustomerProductDoc = {
  */
 export type CustomerPositionDoc = {
   _id: ObjectId;
+  /** «ID»: the record's own key (e.g. Kundennummer from the source system), unique; missing = none */
+  externalId?: string;
   customerId: ObjectId;
   /** code of domain `productServiceType` */
   productServiceType: string;
@@ -191,6 +196,8 @@ export type CustomerPositionDoc = {
  */
 export type PositionTransactionDoc = {
   _id: ObjectId;
+  /** «ID»: the record's own key (e.g. Kundennummer from the source system), unique; missing = none */
+  externalId?: string;
   positionId: ObjectId;
   /** denormalised for deleting with the customer */
   customerId: ObjectId;
@@ -236,6 +243,8 @@ export type JourneyDoc = {
   _id: ObjectId;
   name: string;
   description: string;
+  /** Kampagne | Event (src/lib/journeyTypes.ts); missing = campaign (journeys from before 2026-11-25) */
+  journeyType?: JourneyType;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -298,8 +307,11 @@ export type CustomerJourneyDoc = {
   customerId: ObjectId;
   journeyId: ObjectId;
   status: "active" | "done" | "cancelled";
-  /** assigned individually, or via a Kunden Selektion (rule) */
-  source: { kind: "manual" } | { kind: "rule"; ruleId: ObjectId; ruleName: string };
+  /** assigned individually, via a Kunden Selektion (rule), or started by an event («Journeys starten») */
+  source:
+    | { kind: "manual" }
+    | { kind: "rule"; ruleId: ObjectId; ruleName: string }
+    | { kind: "event"; eventId: ObjectId; eventName: string };
   startedAt: Date;
   completedAt: Date | null;
   createdBy: string;
@@ -410,7 +422,7 @@ export type ActionDoc = {
 /** One call of an event's trigger service (GET, no input values). */
 export type EventCall = {
   at: Date;
-  /** user id, or TIMER_CALLER for the background timer */
+  /** user id */
   by: string;
   serviceName: string;
   url: string;
@@ -427,17 +439,33 @@ export type EventCall = {
   raw: string | null;
 };
 
+/** One «Journeys starten» of an event (customer numbers of its last call → runs of its journey). */
+export type EventStart = {
+  at: Date;
+  by: string;
+  /** customer numbers found in the last call (distinct) */
+  numbers: number;
+  /** runs created */
+  created: number;
+  /** customers that already had an active run of the journey */
+  skipped: number;
+  /** numbers that aren't customers (first 20) */
+  unknown: string[];
+};
+
 export type EventDoc = {
   _id: ObjectId;
   name: string;
   description: string;
   serviceId: ObjectId;
   updateFrequency: UpdateFrequency;
+  /** what the IDs in the service's answer refer to: customer | position | transaction; missing = customer */
+  idRef?: IdRef;
   journeyId?: ObjectId;
   /** the latest call of the trigger service («Service jetzt aufrufen»), missing = never called */
   lastCall?: EventCall;
-  /** the timer's claim while it calls the service (so two servers never call it twice) */
-  callLockedUntil?: Date;
+  /** the latest «Journeys starten»: customers from the last call that got a run */
+  lastStart?: EventStart;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -624,6 +652,10 @@ async function init(db: Db) {
     c.positionTransactions.createIndex({ positionId: 1, sort: 1 }),
     c.positionTransactions.createIndex({ customerId: 1 }),
     c.customerComPrefs.createIndex({ comPrefType: 1 }),
+    // «ID» unique per collection, only where set (case-sensitive)
+    ...(["customers", "customerPositions", "positionTransactions"] as const).map((k) =>
+      c[k].createIndex({ externalId: 1 }, { unique: true, partialFilterExpression: { externalId: { $type: "string" } }, name: "external_id_unique" }),
+    ),
     c.rules.createIndex({ name: 1 }),
     c.actions.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "action_name_unique" }),
     c.actions.createIndex({ "apiKey.hash": 1 }, { unique: true, partialFilterExpression: { "apiKey.hash": { $exists: true } }, name: "action_api_key" }),

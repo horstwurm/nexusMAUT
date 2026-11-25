@@ -2,18 +2,22 @@
 
 Marketing-Automation für die nexus-Anwendungen – live auf <https://nexus-maut.vercel.app>.
 
-- **Kunden** mit Produkten, Positionen, Transaktionen und eigenen Attributen;
+- **Kunden** mit Produkten, Positionen, Transaktionen und eigenen Attributen; jeder Datensatz
+  kann eine eindeutige **ID** haben (z.B. Kundennummer, aus dem Upload übernommen);
   «Service»-Attribute holen Werte aus anderen Systemen (mit Mock-Schalter).
 - **Kunden Selektionen** finden Zielgruppen über Kunde, Positionen und Transaktionen.
 - **Journeys** sind Folgen von Schritten: Aktion, Inhalt mit Platzhaltern und
   **Feedback-Optionen** (Lead, Chance, Interesse, Indifferent, Kein Interesse aktuell,
   Kein Interesse).
-- **KundenJourneys (Kampagnen)** begleiten jeden Kunden: Status pro Schritt (Vorschlag, Bereit zur
+- **Journeys** sind vom Typ **Kampagne** (Kunden werden per Selektion oder einzeln zugewiesen)
+  oder **Event** (gestartet von einem Event).
+- **Kunden Journeys** begleiten jeden Kunden: Status pro Schritt (Vorschlag, Bereit zur
   Ausführung, Ausgesetzt, Erledigt, Übersprungen), «Daten prüfen», Kundenfeedback,
   **«Ausführen»** sendet die bereiten Schritte an das System der Aktion.
-- **Events** (erste Version, wird noch überarbeitet): Ereignisse mit Trigger-Service,
-  Aktualisierung und Journey; «Service jetzt aufrufen» zeigt den letzten Aufruf. Ein
-  Zeitgeber im Hintergrund kann fällige Events abfragen – standardmässig ausgeschaltet.
+- **Events**: Ereignisse mit Trigger-Service, Aktualisierung, ID-Bezug (Kunde, Position
+  oder Transaktion) und Event-Journey; «Service jetzt aufrufen» zeigt den letzten Aufruf,
+  «Journeys starten» startet die Journey für die genannten Kunden. Im Mock-Modus liefert der
+  Trigger-Service echte IDs. Regelmässiges automatisches Abfragen folgt später.
 - **Data Management:** Initial Upload von Kunden, Positionen und Transaktionen aus CSV,
   Excel oder JSON (Test, Quellname, Fortschritt, frühere Uploads löschen); jeder Datensatz
   zeigt seine Quelle (Upload oder «Manuell»).
@@ -58,7 +62,6 @@ Nützliche Skripte:
 | `AUTH_MODE` | `local` (Standard) oder `nexusIdentity`, solange in der Administration nichts gespeichert ist |
 | `NEXUS_ISSUER`, `NEXUS_CLIENT_ID`, `NEXUS_CLIENT_SECRET` | nur für die Anmeldung über nexusIdentity |
 | `NEXUS_POST_LOGOUT_URI` | optional, falls die in nexusIdentity registrierte Post-Logout-URI von `APP_URL` abweicht |
-| `EVENT_TIMER` | `on` startet den Zeitgeber für die Trigger-Services der Events (sonst aus) |
 | `NODE_MAILER_*` | SMTP (z.B. Brevo) für «Passwort vergessen» und die Testmail; ohne SMTP erscheinen Mails in der Entwicklung in der Konsole |
 
 Für nexusIdentity dort eine *vertrauliche* Anwendung anlegen mit Redirect-URI
@@ -77,7 +80,7 @@ Für nexusIdentity dort eine *vertrauliche* Anwendung anlegen mit Redirect-URI
 
 ## Verkaufspräsentation
 
-[`nexusMAUT-Uebersicht.pptx`](nexusMAUT-Uebersicht.pptx) – 17 Folien auf Deutsch, erzeugt mit
+[`nexusMAUT-Uebersicht.pptx`](nexusMAUT-Uebersicht.pptx) – 19 Folien auf Deutsch, erzeugt mit
 `node scripts/deck/build-deck.cjs`. Die Screenshots stammen aus einer Demo-Datenbank mit
 fiktiven Kunden, nie aus den produktiven Daten (Ablauf in [CLAUDE.md](CLAUDE.md)).
 

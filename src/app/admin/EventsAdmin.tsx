@@ -3,29 +3,26 @@
 import { useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText, formatDate } from "@/lib/client";
-import { TRIGGER_SERVICE_TYPE, UPDATE_FREQUENCIES, UPDATE_FREQUENCY_LABELS, type UpdateFrequency } from "@/lib/events";
+import { ID_REF_LABELS, ID_REFS, TRIGGER_SERVICE_TYPE, UPDATE_FREQUENCIES, UPDATE_FREQUENCY_LABELS, type IdRef, type UpdateFrequency } from "@/lib/events";
 import type { EventView, JourneyView, ServiceView } from "@/lib/types";
 
-type Draft = { id: string | null; name: string; description: string; serviceId: string; updateFrequency: UpdateFrequency; journeyId: string };
+type Draft = { id: string | null; name: string; description: string; serviceId: string; updateFrequency: UpdateFrequency; idRef: IdRef; journeyId: string };
 
 /** Admin tab «Events»: name, description, the trigger service that reports the event, how often it is asked and its journey. */
 export function EventsAdmin({
   initial,
   services: initialServices,
   journeys: initialJourneys,
-  timerOn,
 }: {
   initial: EventView[];
   services: ServiceView[];
   journeys: JourneyView[];
-  /** the background timer runs (EVENT_TIMER=on) */
-  timerOn: boolean;
 }) {
   const [list, setList] = useState(initial);
   const [services, setServices] = useState(initialServices);
   const [journeys, setJourneys] = useState(initialJourneys);
   const triggers = services.filter((s) => s.serviceType === TRIGGER_SERVICE_TYPE);
-  const empty = (): Draft => ({ id: null, name: "", description: "", serviceId: triggers[0]?.id ?? "", updateFrequency: "daily", journeyId: "" });
+  const empty = (): Draft => ({ id: null, name: "", description: "", serviceId: triggers[0]?.id ?? "", updateFrequency: "daily", idRef: "customer", journeyId: "" });
   const [draft, setDraft] = useState<Draft>(empty);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -65,8 +62,8 @@ export function EventsAdmin({
       </h2>
       <p className="small muted">
         Ereignisse bei Kunden, z.B. «Hypothek läuft ab» oder «Grosse Einzahlung». Ein Event wird von einem Trigger-Service gemeldet (Servicetyp
-        «{TRIGGER_SERVICE_TYPE}»); die Aktualisierung legt fest, wie oft ein Zeitgeber im Hintergrund den Service abfragt (gerechnet ab dem letzten
-        Aufruf; «Manuell» = nur mit «Service jetzt aufrufen» unter KundenJourneys → Events). {timerOn ? "Der Zeitgeber läuft." : "Der Zeitgeber ist zurzeit ausgeschaltet."}
+        «{TRIGGER_SERVICE_TYPE}»); die Aktualisierung legt fest, wie oft der Service abgefragt werden soll (noch nicht automatisch – vorerst mit
+        «Service jetzt aufrufen» unter KundenJourneys → Events).
       </p>
       <Notice kind="error">{error}</Notice>
       {!triggers.length && (
@@ -76,9 +73,9 @@ export function EventsAdmin({
         </Notice>
       )}
 
-      {!journeys.length && (
+      {!journeys.some((j) => j.journeyType === "event") && (
         <Notice kind="warn">
-          Es gibt noch keine Journey. Zuerst unter <a href="/journeys">Journeys</a> eine anlegen.
+          Es gibt noch keine Journey vom Typ «Event». Zuerst unter <a href="/journeys">Journeys</a> eine anlegen.
         </Notice>
       )}
 
@@ -93,6 +90,7 @@ export function EventsAdmin({
                 <th>Beschreibung</th>
                 <th>Trigger-Service</th>
                 <th>Aktualisierung</th>
+                <th>ID-Bezug</th>
                 <th>Journey</th>
                 <th>Geändert</th>
                 <th />
@@ -121,6 +119,7 @@ export function EventsAdmin({
                   <td>
                     <span className="badge badge-accent">{UPDATE_FREQUENCY_LABELS[e.updateFrequency] ?? e.updateFrequency}</span>
                   </td>
+                  <td>{ID_REF_LABELS[e.idRef]}</td>
                   <td>{e.journeyName ?? <span className={e.journeyId ? "badge badge-danger" : "muted"}>{e.journeyId ? "Journey fehlt" : "–"}</span>}</td>
                   <td>{formatDate(e.updatedAt)}</td>
                   <td>
@@ -135,6 +134,7 @@ export function EventsAdmin({
                             description: e.description,
                             serviceId: e.serviceId,
                             updateFrequency: e.updateFrequency,
+                            idRef: e.idRef,
                             journeyId: e.journeyName ? (e.journeyId ?? "") : "",
                           })
                         }
@@ -169,6 +169,7 @@ export function EventsAdmin({
             description: draft.description,
             serviceId: draft.serviceId,
             updateFrequency: draft.updateFrequency,
+            idRef: draft.idRef,
             journeyId: draft.journeyId,
           };
           const ok = await act(() => api(draft.id ? `/api/events/${draft.id}` : "/api/events", { method: draft.id ? "PUT" : "POST", body }));
@@ -206,10 +207,26 @@ export function EventsAdmin({
           </select>
         </label>
         <label className="field">
+          <span>ID-Bezug</span>
+          <select value={draft.idRef} onChange={(e) => setDraft({ ...draft, idRef: e.target.value as IdRef })}>
+            {ID_REFS.map((r) => (
+              <option key={r} value={r}>
+                {ID_REF_LABELS[r]}
+              </option>
+            ))}
+          </select>
+          <span className="hint">
+            Worauf sich die IDs in der Antwort des Trigger-Service beziehen: «Kundennummer», «Positionsnummer» oder «Transaktionsnummer» –
+            Positionen und Transaktionen führen zu ihrem Kunden.
+          </span>
+        </label>
+        <label className="field">
           <span>Journey</span>
           <select required value={draft.journeyId} onChange={(e) => setDraft({ ...draft, journeyId: e.target.value })}>
             <option value="">– wählen –</option>
-            {journeys.map((j) => (
+            {journeys
+              .filter((j) => j.journeyType === "event" || j.id === draft.journeyId)
+              .map((j) => (
               <option key={j.id} value={j.id}>
                 {j.name}
               </option>

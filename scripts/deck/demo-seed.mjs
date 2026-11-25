@@ -64,6 +64,16 @@ execFileSync("node", ["--disable-warning=MODULE_TYPELESS_PACKAGE_JSON", "--disab
   stdio: "inherit",
 });
 
+// ---- «ID»s for the sample data (fictional Kunden-, Positions-, Transaktionsnummern) ----
+const numberAll = async (col, prefix, digits, start) => {
+  const docs = await db.collection(col).find({}, { projection: { _id: 1 } }).sort({ customerId: 1, lastname: 1, name: 1, sort: 1, _id: 1 }).toArray();
+  if (docs.length)
+    await db.collection(col).bulkWrite(docs.map((d, i) => ({ updateOne: { filter: { _id: d._id }, update: { $set: { externalId: prefix + String(start + i).padStart(digits, "0") } } } })));
+};
+await numberAll("customers", "K", 6, 100001);
+await numberAll("customerPositions", "P", 6, 1);
+await numberAll("positionTransactions", "T", 7, 1);
+
 // ---- service (mock) + «Service» customer attribute ----
 await domain("serviceType", "bonitaet", "Bonität");
 await domain("serviceType", "crm", "CRM");
@@ -108,8 +118,8 @@ await rule("Kartenumsatz ≥ CHF 1'000 in 90 Tagen", "Aktive Kartenkunden", "all
 await rule("Top-Bonität", "Bonitätsstufe A aus der Bonitätsprüfung", "all", [{ level: "customer", field: "attribute", attrId: bonitaet, op: "eq", value: "A" }]);
 
 // ---- journeys with steps and feedback options ----
-const journey = async (name, description, steps) => {
-  const id = (await call("/api/journeys", { body: { name, description } })).json.id;
+const journey = async (name, description, steps, journeyType = "campaign") => {
+  const id = (await call("/api/journeys", { body: { name, description, journeyType } })).json.id;
   for (const [actionId, content, options] of steps) {
     const sid = (await call(`/api/journeys/${id}/steps`, { body: { actionId, content } })).json.id;
     for (const [option, meaning] of options) await call(`/api/journeys/${id}/steps/${sid}/feedback-options`, { body: { option, meaning } });
@@ -129,6 +139,12 @@ const anlage = await journey("Anlageberatung für Sparer", "Sparerinnen und Spar
 const gebtag = await journey("Geburtstagsgruss", "Karte mit Gutschein zum Geburtstag", [
   [karte, "Liebe(r) {{Kunde.Vorname}}, herzlichen Glückwunsch zum {{Kunde.Alter}}. Geburtstag!", [["Gutschein eingelöst", "INTEREST"]]],
 ]);
+
+// Event journey: started from the event «Hypothek läuft in 6 Monaten ab»
+const hypoJourney = await journey("Hypothek verlängern", "Kundinnen und Kunden vor dem Ablauf ihrer Hypothek ansprechen", [
+  [anruf, "Anruf bei {{Kunde.Anrede}} {{Kunde.Nachname}}: Die Hypothek läuft bald ab – Verlängerung und Zinsabsicherung besprechen.", OPTS_CALL],
+  [termin, "Einladung zur Hypothekarberatung für {{Kunde.Anrede}} {{Kunde.Nachname}}.", [["Termin gebucht", "LEAD"], ["Offerte gewünscht", "CHANCE"], ["Kein Interesse", "NO_INTEREST"]]],
+], "event");
 
 // ---- KundenJourneys ----
 await call("/api/customer-journeys", { body: { journeyId: willkommen, ruleId: jung } });
@@ -165,9 +181,36 @@ for (const [i, r] of aRuns.entries()) {
     await feedback(r.id, steps[0].id, OPTS_CALL[i][0], [5, 4, 3, null][i]);
   } else if (i < 10) await setStatus(r.id, steps[0].id, "ready");
 }
+// ---- event: mocked trigger service → «Journeys starten» ----
+await domain("serviceType", "triggerservice", "Trigger-Service");
+const trig = (await call("/api/services", { body: { name: "Hypothek läuft ab", serviceType: "triggerservice", url: "https://kernbank.example.com/api/hypotheken/ablauf", mock: true } })).json.id;
+await call(`/api/services/${trig}/get-attributes`, {
+  body: { attribute: "Hypotheken", attributeType: "alpha", options: [], list: { path: "", columns: [{ attribute: "ID", attributeType: "alpha", options: [] }, { attribute: "Ablaufdatum", attributeType: "date", options: [] }] } },
+});
+const hypoEvent = (await call("/api/events", {
+  body: { name: "Hypothek läuft in 6 Monaten ab", description: "Die Kernbank meldet Hypotheken, die in den nächsten sechs Monaten auslaufen.", serviceId: trig, updateFrequency: "daily", idRef: "customer", journeyId: hypoJourney },
+})).json.id;
+await call(`/api/events/${hypoEvent}/call`, { body: {} });
+await call(`/api/events/${hypoEvent}/start`, { body: {} });
+
+// ---- Data Management: a small upload from the «Kernsystem» (fictional) ----
+{
+  const first = ["Nina", "Luca", "Sara", "Jonas", "Elena", "David", "Mia", "Noah", "Lara", "Tim", "Alina", "Simon"];
+  const last = ["Graf", "Steiner", "Frei", "Meyer", "Wyss", "Kunz", "Roth", "Baumann", "Keller", "Huber", "Schmid", "Fischer"];
+  const kunden = first.map((v, i) => ({ kundennummer: `K2000${String(i + 1).padStart(2, "0")}`, vorname: v, nachname: last[i], geburtsdatum: `19${70 + i * 2}-0${(i % 9) + 1}-1${i % 9}`, anrede: i % 2 ? "Herr" : "Frau" }));
+  const positionen = kunden.map((k, i) => ({ positionsnummer: `P2000${String(i + 1).padStart(2, "0")}`, kundennummer: k.kundennummer, typ: "konto", produkt: "Privatkonto", werte: { Saldo: 1500 + i * 730, "Eröffnet am": "2026-10-01" } }));
+  const transaktionen = positionen.map((p, i) => ({ transaktionsnummer: `T20000${String(i + 1).padStart(2, "0")}`, positionsnummer: p.positionsnummer, kundennummer: p.kundennummer, typ: "konto", werte: { Datum: "2026-11-02", Buchungstext: "Lohn", Betrag: 4200 + i * 150 } }));
+  const form = new FormData();
+  form.append("files", new Blob([JSON.stringify({ kunden, positionen, transaktionen })], { type: "application/json" }), "kernsystem-neukunden.json");
+  for (const [k, v] of [["mode", "upload"], ["deleteCustomers", "false"], ["deleteAttributes", "false"], ["sourceName", "Kernsystem Neukunden November"]]) form.append(k, v);
+  const r = await fetch(B + "/api/data-management/initial-upload", { method: "POST", headers: { Cookie: `sid=${cookie}`, Origin: B }, body: form });
+  const last1 = (await r.text()).trim().split("\n").at(-1);
+  if (!r.ok || !last1.includes('"result"')) throw new Error(`upload → ${r.status} ${last1.slice(0, 300)}`);
+}
+
 await call("/api/customer-journeys/check", { body: { journeyId: willkommen } });
 await call("/api/customer-journeys/check", { body: { journeyId: anlage } });
 
-console.log(JSON.stringify({ willkommen: wRuns.length, anlage: aRuns.length, geburtstag: (await runsOf(gebtag)).length, journeyIds: { willkommen, anlage, gebtag }, leaSid: cookie.slice(0, 4) + "…" }));
+console.log(JSON.stringify({ willkommen: wRuns.length, anlage: aRuns.length, geburtstag: (await runsOf(gebtag)).length, journeyIds: { willkommen, anlage, gebtag, hypoJourney }, leaSid: cookie.slice(0, 4) + "…" }));
 writeFileSync(`${DIR}/nexus-maut-demo-session.txt`, cookie);
 await client.close();

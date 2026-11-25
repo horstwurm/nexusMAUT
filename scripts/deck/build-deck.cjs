@@ -184,7 +184,7 @@ async function main() {
     s.addText("NEXUSMAUT · MARKETING AUTOMATION", { placeholder: "eyebrow" });
     s.addText("Die richtigen Kunden. Im richtigen Moment.", { placeholder: "title" });
     s.addText("Zielgruppen aus Kunden-, Positions- und Transaktionsdaten finden, Werte aus Ihren Systemen dazuholen – und jeden Kunden mit persönlichen Journeys begleiten.", { placeholder: "body" });
-    s.addText("Kunden · Selektionen · Journeys · Ausführen · Feedback", { x: 0.7, y: 6.55, w: 8, h: 0.35, fontSize: 13, color: "9AA0B8", margin: 0, isTextBox: true, objectName: "tagline" });
+    s.addText("Kunden · Selektionen · Journeys · Events · Ausführen · Feedback", { x: 0.7, y: 6.55, w: 8, h: 0.35, fontSize: 13, color: "9AA0B8", margin: 0, isTextBox: true, objectName: "tagline" });
     // decorative: customers → Selektion → journey steps (as on the homepage)
     const gx = 8.3, gy = 1.6, picked = new Set([3, 9, 12, 20, 26, 31, 37, 44]);
     s.addShape("rect", { x: 8.0, y: 1.2, w: 4.75, h: 5.0, fill: { color: "171B2D" }, line: { color: "262B42", width: 0.75 }, objectName: "hero panel" });
@@ -259,7 +259,7 @@ async function main() {
     const s = content("Einstieg", "So funktioniert's", "In vier Schritten startklar", "Kein Projekt, keine Installation – anmelden und loslegen.");
     const steps = [
       ["Anmelden", "Mit E-Mail und Passwort oder über nexusIdentity. Die erste Person wird Admin, weitere erhalten eine Rolle."],
-      ["Datenmodell einrichten", "Kundenattribute, Produkttypen, Services und Aktionen – in der Administration, ohne Programmierung."],
+      ["Datenmodell einrichten", "Attribute, Produkttypen, Services und Aktionen – ohne Programmierung; Daten per CSV, Excel oder JSON hochladen."],
       ["Zielgruppe finden", "Kunden Selektion definieren, Treffer prüfen, Journey zuweisen."],
       ["Begleiten und ausführen", "Status setzen, Daten prüfen, «Ausführen» – das Feedback kommt zurück."],
     ];
@@ -282,8 +282,8 @@ async function main() {
     await features(s, [
       ["layers", "Positionen und Transaktionen pro Produkttyp mit eigenen Attributen: Text, Zahl, Datum, Ja/Nein, Auswahl"],
       ["sliders", "Kundenattribute wie Anrede oder Segment – in Formular, Liste, Selektion und Platzhaltern"],
+      ["key", "Eindeutige ID pro Kunde, Position und Transaktion – z.B. die Kundennummer aus dem Kernsystem"],
       ["message", "Produkte und Kommunikationspräferenzen pro Kunde"],
-      ["dice", "100 Beispielkunden zum Ausprobieren – mit einem Befehl angelegt und wieder entfernt"],
     ], { x: 8.5, y: 2.3, w: 4.25, rowH: 1.05 });
     s.addNotes("Das Datenmodell bestimmen Sie: Produkttypen und ihre Attribute legt die Administration fest, ohne Programmierung.");
   }
@@ -297,6 +297,17 @@ async function main() {
       ["server", "Aufrufe auf dem Server, Antworten auch als Liste mit Spalten"],
     ], { x: 8.3, y: 2.3, w: 4.45, rowH: 1.05 });
     s.addNotes("Mit Mock lassen sich Selektionen und Journeys schon testen, bevor die Schnittstelle bereitsteht. Jeder Wert zeigt, woher er kommt.");
+  }
+  {
+    const s = content("Kunden", "01 · Kunden", "Daten übernehmen statt abtippen", "Kunden, Positionen und Transaktionen aus dem Kernsystem laden – geprüft, bevor etwas gespeichert wird.");
+    shot(s, "mau-data.png", { x: 0.6, y: 2.15, w: 7.3, h: 4.75 }, { caption: "Administration → Data Management: Initial Upload mit früheren Uploads" });
+    await features(s, [
+      ["layers", "CSV, Excel oder JSON – Typen, Kunden, Positionen und Transaktionen in einem Durchgang"],
+      ["check", "«Test» zeigt Fehler mit Tabelle und Zeile, bevor etwas geschrieben wird"],
+      ["key", "Kunden-, Positions- und Transaktionsnummern werden zur eindeutigen ID"],
+      ["refresh", "Jeder Upload mit Namen – seine Daten lassen sich gezielt wieder löschen"],
+    ], { x: 8.3, y: 2.3, w: 4.45, rowH: 1.05 });
+    s.addNotes("Jeder Datensatz zeigt seine Quelle: aus welchem Upload und von wann – oder «Manuell» erfasst.");
   }
 
   // ======== 02 Selektionen ========
@@ -314,7 +325,7 @@ async function main() {
   // ======== 03 Journeys ========
   pres.addSection({ title: "Journeys" });
   {
-    const s = content("Journeys", "03 · Journeys", "Abläufe mit persönlichem Inhalt", "Eine Journey ist eine Folge von Schritten: Aktion, Inhalt mit Platzhaltern und die möglichen Feedbacks des Kunden.");
+    const s = content("Journeys", "03 · Journeys", "Abläufe mit persönlichem Inhalt", "Eine Journey ist eine Kampagne oder gehört zu einem Event – Schritte mit Aktion, Inhalt mit Platzhaltern und möglichen Feedbacks.");
     shot(s, "mau-journey-steps.png", { x: 0.6, y: 2.15, w: 12.1, h: 4.75 }, { caption: "Journey «Willkommen Neukunden»: Brief, Anruf, Einladung – mit Feedback-Optionen", center: true });
     s.addNotes("Platzhalter wie {{Kunde.Nachname}} oder {{Kunde.Bonität}} werden für jeden Kunden gefüllt. Unbekannte Platzhalter markiert der Editor sofort.");
   }
@@ -333,14 +344,14 @@ async function main() {
   }
 
   // ======== 04 KundenJourneys ========
-  pres.addSection({ title: "KundenJourneys" });
+  pres.addSection({ title: "Kunden Journeys" });
   {
-    const s = content("KundenJourneys", "04 · KundenJourneys", "Jeden Kunden auf seiner Journey begleiten", "Journey einer Selektion oder einzelnen Kunden zuweisen – und pro Kunde sehen, wo er steht.");
-    shot(s, "mau-cj.png", { x: 0.6, y: 2.15, w: 12.1, h: 4.75 }, { caption: "Journeys links, rechts die KundenJourneys mit Fortschritt, Datenfehlern, «Daten prüfen» und «Ausführen»", center: true });
+    const s = content("Kunden Journeys", "04 · Kunden Journeys", "Jeden Kunden auf seiner Journey begleiten", "Journey einer Selektion oder einzelnen Kunden zuweisen – und pro Kunde sehen, wo er steht.");
+    shot(s, "mau-cj.png", { x: 0.6, y: 2.15, w: 12.1, h: 4.75 }, { caption: "Links Kampagnen und Events, rechts die KundenJourneys mit Fortschritt, Datenfehlern, «Daten prüfen» und «Ausführen»", center: true });
     s.addNotes("Wer die Journey schon aktiv hat, wird beim Zuweisen übersprungen. Die Schritte werden kopiert – spätere Änderungen an der Vorlage verändern laufende Journeys nicht.");
   }
   {
-    const s = content("KundenJourneys", "04 · KundenJourneys", "Status, Daten und Feedback pro Schritt", "Ein Blick zeigt, was erledigt ist, was bereit ist – und was der Kunde geantwortet hat.");
+    const s = content("Kunden Journeys", "04 · Kunden Journeys", "Status, Daten und Feedback pro Schritt", "Ein Blick zeigt, was erledigt ist, was bereit ist – und was der Kunde geantwortet hat.");
     shot(s, "mau-cj-steps.png", { x: 0.6, y: 2.15, w: 8.3, h: 4.75 }, { caption: "Schritte eines Kunden: Status, Datenprüfung, Inhalt, Feedback-Optionen, Feedback" });
     const st = [["Vorschlag", "EEF0F4", MUTED], ["Bereit zur Ausführung", "E3F4F7", ACCENT], ["Ausgesetzt", "FFF4DB", "8A5A00"], ["Erledigt", "E6F4EA", "2B8A3E"], ["Übersprungen", "EEF0F4", MUTED]];
     s.addText("STATUS", { x: 9.3, y: 2.25, w: 3.4, h: 0.3, fontSize: 10, bold: true, color: MUTED, charSpacing: 2, margin: 0, isTextBox: true, objectName: "status label" });
@@ -352,7 +363,7 @@ async function main() {
     s.addNotes("«Erledigt» bereitet den Inhalt für den Kunden auf und speichert ihn – so ist nachvollziehbar, was der Kunde bekommen hat.");
   }
   {
-    const s = content("KundenJourneys", "04 · KundenJourneys", "Ausführen – mit einem Klick, nach Bestätigung", "Alle Schritte «Bereit zur Ausführung» gehen an das System ihrer Aktion: Druckerei, Kundencenter, E-Mail-Versand.");
+    const s = content("Kunden Journeys", "04 · Kunden Journeys", "Ausführen – mit einem Klick, nach Bestätigung", "Alle Schritte «Bereit zur Ausführung» gehen an das System ihrer Aktion: Druckerei, Kundencenter, E-Mail-Versand.");
     shot(s, "mau-execute.png", { x: 0.6, y: 2.2, w: 6.0, h: 3.4 }, { caption: "Bestätigung: wie viele Schritte an welche Aktion gehen" });
     const flow = [["Bereit", "E3F4F7", ACCENT], ["Senden", "FDECEC", RED], ["Aktion", "EEF0F4", INK], ["Erledigt", "E6F4EA", "2B8A3E"]];
     flow.forEach(([t, fill, color], i) => {
@@ -365,7 +376,7 @@ async function main() {
     s.addNotes("Der rote Knopf ist bewusst rot: Er wirkt nach aussen. Deshalb zeigt der Dialog zuerst, was passieren wird – erst «Senden» schickt ab.");
   }
   {
-    const s = content("KundenJourneys", "04 · KundenJourneys", "Das Feedback kommt zurück – automatisch", "Das ausführende System meldet die Antwort des Kunden mit dem API-Schlüssel seiner Aktion.");
+    const s = content("Kunden Journeys", "04 · Kunden Journeys", "Das Feedback kommt zurück – automatisch", "Das ausführende System meldet die Antwort des Kunden mit dem API-Schlüssel seiner Aktion.");
     shot(s, "mau-api.png", { x: 0.6, y: 2.15, w: 6.3, h: 4.75 }, { caption: "«API» pro Schritt: Aufruf der Aktion und Feedback setzen, zum Kopieren" });
     shot(s, "mau-actions.png", { x: 7.25, y: 2.15, w: 5.5, h: 2.3 }, { caption: "Administration → Aktionen: API-Schlüssel pro Aktion" });
     await features(s, [
@@ -374,6 +385,17 @@ async function main() {
       ["refresh", "Neu erzeugen oder widerrufen mit einem Klick"],
     ], { x: 7.25, y: 4.95, w: 5.5, rowH: 0.62, size: 13.5 });
     s.addNotes("Damit schliesst sich der Kreis: Selektion, Journey, Ausführen – und die Antwort des Kunden landet beim richtigen Schritt.");
+  }
+  {
+    const s = content("Kunden Journeys", "04 · Kunden Journeys", "Events: Journeys aus Ereignissen", "Ein Trigger-Service meldet, wen es betrifft – etwa auslaufende Hypotheken. Ein Klick startet die passende Journey.");
+    shot(s, "mau-event.png", { x: 0.6, y: 2.15, w: 7.6, h: 4.75 }, { caption: "Event «Hypothek läuft in 6 Monaten ab»: letzter Aufruf und «Journeys starten»" });
+    await features(s, [
+      ["bolt", "Trigger-Service liefert die IDs – Kunde, Position oder Transaktion (ID-Bezug)"],
+      ["route", "«Journeys starten» weist die Event-Journey genau diesen Kunden zu"],
+      ["shield", "Wer schon aktiv ist, wird übersprungen; unbekannte IDs werden gemeldet"],
+      ["dice", "Mock liefert echte IDs – testen, bevor die Schnittstelle steht"],
+    ], { x: 8.6, y: 2.3, w: 4.15, rowH: 1.05 });
+    s.addNotes("Kampagnen wählen ihre Kunden über Selektionen, Events über die Meldung eines anderen Systems. Das regelmässige automatische Abfragen der Trigger-Services folgt später.");
   }
 
   // ======== Vertrauen ========

@@ -171,7 +171,19 @@ await sleep(600);
 await element("mau-execute", ".modal", 0);
 await click(".modal button", "Abbrechen", 0);
 
+// Event journey «Hypothek verlängern»: its event (trigger service, last call, «Journeys starten») above the runs
+const hypo = await journey("Hypothek verlängern");
+await nav(`/customer-journeys?journey=${hypo._id.toHexString()}`, 3000);
+await capture("mau-event", { x: 0, y: 0, width: 1760, height: H });
+
 await send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: DSF, mobile: false });
+// Data Management: Initial Upload with the list of earlier uploads («Upload Daten löschen» switched on)
+await nav("/admin?tab=data", 2500);
+await click("label.switch-field", "Upload Daten löschen", 0);
+await waitFor("document.querySelector('[role=tabpanel]:not([hidden])').textContent.includes('Kernsystem Neukunden')");
+await sleep(800);
+await element("mau-data", "[role=tabpanel]:not([hidden]) .card", 0, 0);
+
 for (const [tab, name] of [["services", "mau-services"], ["actions", "mau-actions"], ["auth", "mau-auth"]]) {
   await nav(`/admin?tab=${tab}`, 2500);
   await element(name, name === "mau-actions" ? "[role=tabpanel]:not([hidden]) .card .table-wrap" : "[role=tabpanel]:not([hidden]) .card", name === "mau-actions" ? 12 : 0, 0);
