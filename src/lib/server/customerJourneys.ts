@@ -2,10 +2,12 @@ import "server-only";
 import { ObjectId } from "mongodb";
 import type { CustomerFeedbackView, CustomerJourneyStepView, CustomerJourneyView } from "@/lib/types";
 import { collections, type CustomerFeedbackDoc, type CustomerJourneyDoc, type CustomerJourneyStepDoc } from "./db";
+import { contentFormatOf } from "@/lib/contentFormats";
 import { isOpenStep, OPEN_STEP_STATUSES } from "@/lib/stepStatus";
 import { toFeedbackOption } from "./journeys";
 import { HttpError } from "./http";
 import { loadRuleDataset, matchingCustomers } from "./rules";
+import { rendered, rulesOfAction } from "./stepContent";
 import { previewStep, type ServiceCache, type StepPreview } from "./stepPreview";
 
 // KundenJourneys: journeys assigned to customers and their progress per step.
@@ -66,17 +68,15 @@ export async function toStepViews(list: CustomerJourneyStepDoc[]): Promise<Custo
     // the options of the template step (live, not copied: a deleted template step has none)
     feedbackOptions.find({ stepId: { $in: [...new Map(list.map((s) => [s.stepId.toHexString(), s.stepId])).values()] } }).sort({ sort: 1, createdAt: 1 }).toArray(),
   ]);
-  const names = new Map(
-    (await actions.find({ _id: { $in: [...new Set(list.map((s) => s.actionId))] } }, { projection: { name: 1 } }).toArray()).map((a) => [
-      a._id.toHexString(),
-      a.name,
-    ]),
-  );
+  const actionDocs = await actions.find({ _id: { $in: [...new Set(list.map((s) => s.actionId))] } }, { projection: { name: 1, contentFormat: 1 } }).toArray();
+  const names = new Map(actionDocs.map((a) => [a._id.toHexString(), a.name]));
+  const formats = new Map(actionDocs.map((a) => [a._id.toHexString(), contentFormatOf(a)]));
   return list.map((s) => ({
     id: s._id.toHexString(),
     stepId: s.stepId.toHexString(),
     actionId: s.actionId.toHexString(),
     actionName: names.get(s.actionId.toHexString()) ?? "(gelöschte Aktion)",
+    contentFormat: formats.get(s.actionId.toHexString()) ?? "markdown",
     template: s.template,
     sort: s.sort,
     status: s.status,
@@ -195,9 +195,11 @@ export async function setStepStatus(runId: ObjectId, stepId: ObjectId, status: C
   const now = new Date();
   const set: Partial<CustomerJourneyStepDoc> = { status, updatedAt: now, ...(note !== undefined && { note }) };
   if (status === "done") {
-    const preview = await previewStep(step.template, run.customerId);
-    set.content = preview.segments.map((s) => (s.kind === "text" ? s.text : (s.value ?? s.token))).join("");
-    set.unfilled = preview.segments.filter((s) => s.kind === "placeholder" && s.value === null).map((s) => (s as { token: string }).token);
+    const rules = await rulesOfAction(step.actionId);
+    const preview = await previewStep(step.template, run.customerId, undefined, rules.contentFormat);
+    const r = rendered(preview, rules); // placeholder values escaped for formatted actions
+    set.content = r.content;
+    set.unfilled = r.unfilled;
     set.doneAt = now;
     // rendering is a data check, too
     Object.assign(set, dataResult(preview, now));

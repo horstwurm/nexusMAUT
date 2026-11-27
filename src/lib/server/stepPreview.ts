@@ -1,7 +1,10 @@
 import "server-only";
+import type { ContentFormat } from "@/lib/contentFormats";
+import { expandBlocks } from "@/lib/textBlocks";
+import { textBlocksForRendering } from "./textBlocks";
 import type { ObjectId } from "mongodb";
 import { dayFromDb, formatDay } from "@/lib/customers";
-import { renderPlaceholders, usedGroups, type Placeholder, type Segment } from "@/lib/placeholders";
+import { renderPlaceholders, usedGroups, type ConditionTrace, type Placeholder, type Segment } from "@/lib/placeholders";
 import { formatValue, parseAttributeValues, type AttributeDef, type PositionValue } from "@/lib/positions";
 import { ageOn } from "@/lib/rules";
 import { mapResponse, mockResponse, type MappedValue } from "@/lib/serviceCall";
@@ -30,7 +33,7 @@ export type ServiceRun = {
   sent?: Record<string, PositionValue>;
 };
 
-export type StepPreview = { customer: { id: string; name: string }; segments: Segment[]; services: ServiceRun[] };
+export type StepPreview = { customer: { id: string; name: string }; segments: Segment[]; services: ServiceRun[]; conditions: ConditionTrace[] };
 
 const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const findDef = (defs: AttributeDef[], name: string) => defs.find((d) => eq(d.attribute, name));
@@ -40,7 +43,12 @@ type ServiceResult = { mapped: MappedValue[]; sample: boolean; error?: string };
 /** Service results by "customerId:service" – lets a data check call each service once per customer. */
 export type ServiceCache = Map<string, { result: ServiceResult; run: ServiceRun }>;
 
-export async function previewStep(content: string, customerId: ObjectId, cache?: ServiceCache): Promise<StepPreview> {
+/**
+ * `format`: the action's content format – text building blocks ({{Baustein.code}}) are
+ * inserted first, without their formatting for «Nur Text».
+ */
+export async function previewStep(template: string, customerId: ObjectId, cache?: ServiceCache, format: ContentFormat = "markdown"): Promise<StepPreview> {
+  const content = expandBlocks(template, await textBlocksForRendering(), format);
   const c = await collections();
   const customer = await c.customers.findOne({ _id: customerId });
   if (!customer) throw new HttpError(404, "Kunde nicht gefunden");
@@ -144,6 +152,7 @@ export async function previewStep(content: string, customerId: ObjectId, cache?:
       ...(r.sample && { note: "Beispieldaten" }),
     };
   };
+  const conditions: ConditionTrace[] = [];
   const segments = renderPlaceholders(content, catalog, (group, item) => {
     if (group.id.startsWith("service:") && item.kind && item.kind !== "value") {
       const r = listOf(group.id, item);
@@ -159,6 +168,7 @@ export async function previewStep(content: string, customerId: ObjectId, cache?:
       const v = fmtCell(col, r.list.rows[0]?.values[col.attribute]);
       return v === null ? { value: null, note: r.list.rows.length ? "kein Wert in der ersten Zeile" : "leere Liste" } : { value: v, ...sampleNote };
     }
+    if (group.id === "bausteine") return { value: null, note: "Ein Textbaustein kann keinen anderen enthalten" };
     if (group.id === "kunde") {
       const { raw, def } = customerValue(item.attribute);
       if (raw === undefined || raw === "") return { value: null, note: "kein Wert beim Kunden" };
@@ -204,7 +214,7 @@ export async function previewStep(content: string, customerId: ObjectId, cache?:
       return result.sample ? { value, note: "Beispieldaten" } : { value };
     }
     return { value: null, note: "unbekannt" };
-  }, rowsOf);
+  }, rowsOf, conditions);
 
-  return { customer: { id: customer._id.toHexString(), name: `${customer.name} ${customer.lastname}` }, segments, services: runs };
+  return { customer: { id: customer._id.toHexString(), name: `${customer.name} ${customer.lastname}` }, segments, services: runs, conditions };
 }

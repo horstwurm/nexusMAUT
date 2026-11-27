@@ -143,7 +143,8 @@ await sleep(600);
 await element("mau-feedback-options", ".modal", 0, -1);
 await click(".modal button", "Schliessen", 0);
 await waitFor("document.querySelectorAll('.modal').length === 1");
-await click(".modal button", "Testen", 1);
+// the welcome letter: text blocks, formatting and a condition on «Bonität»
+await click(".modal button", "Testen", 0);
 await waitFor("document.querySelectorAll('.modal').length === 2");
 await sleep(1200);
 await js("document.querySelectorAll('.modal')[1].querySelector('.btn-primary').click()");
@@ -151,6 +152,17 @@ await waitFor("document.querySelectorAll('.modal')[1].querySelector('.step-previ
 await sleep(3500);
 await js(`document.querySelectorAll('.modal')[1].style.maxHeight = 'none'`);
 await element("mau-step-test", ".modal", 0, -1);
+await js(`[...document.querySelectorAll('.modal')[1].querySelectorAll('button')].find(b => b.textContent.trim() === 'Schliessen').click()`);
+await waitFor("document.querySelectorAll('.modal').length === 1");
+
+// the step editor: formatting toolbar, text blocks and «Bedingung einfügen»
+await click(".modal button", "Bearbeiten", 0);
+await waitFor("document.querySelector('.modal form.step .format-toolbar')");
+await click(".modal button", "Bedingung einfügen", 0);
+await waitFor("document.querySelector('.modal .condition-form')");
+await sleep(600);
+await js(`document.querySelector('.modal').style.maxHeight = 'none'`);
+await element("mau-step-editor", ".modal form.step", 0);
 
 await send("Emulation.setDeviceMetricsOverride", { width: 1760, height: H, deviceScaleFactor: DSF, mobile: false });
 await nav(`/customer-journeys?journey=${willkommen._id.toHexString()}`, 3000);
@@ -183,6 +195,17 @@ await click("label.switch-field", "Upload Daten löschen", 0);
 await waitFor("document.querySelector('[role=tabpanel]:not([hidden])').textContent.includes('Kernsystem Neukunden')");
 await sleep(800);
 await element("mau-data", "[role=tabpanel]:not([hidden]) .card", 0, 0);
+
+// text blocks, and the Logfile (top part – the seed's changes)
+await nav("/admin?tab=text-blocks", 2500);
+await element("mau-textblocks", "[role=tabpanel]:not([hidden]) .card .table-wrap", 12, 0);
+await nav("/admin?tab=logfile", 3500);
+await waitFor("document.querySelector('[role=tabpanel]:not([hidden]) table tbody tr')");
+await sleep(800);
+{
+  const r = await js(`(() => { const e = document.querySelector('[role=tabpanel]:not([hidden]) .card'); const b = e.getBoundingClientRect(); return { x: b.x + scrollX, y: b.y + scrollY, width: b.width, height: b.height }; })()`);
+  await capture("mau-logfile", { x: r.x, y: r.y, width: r.width, height: Math.min(r.height, 820) });
+}
 
 for (const [tab, name] of [["services", "mau-services"], ["actions", "mau-actions"], ["auth", "mau-auth"]]) {
   await nav(`/admin?tab=${tab}`, 2500);

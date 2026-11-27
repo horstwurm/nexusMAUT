@@ -502,3 +502,31 @@ mark.ph-missing { background: var(--danger-bg); color: var(--danger); border-rad
 @media (prefers-reduced-motion: reduce) { .upload-progress-bar { transition: none; } }
 .upload-list { margin: -4px 0 14px 52px; }
 @media (max-width: 560px) { .upload-list { margin-left: 0; } }
+
+/* Step contents: formatting toolbar, edit/preview switch, formatted (Markdown) content */
+.format-toolbar { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.format-toolbar .btn { min-width: 34px; }
+.seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-toggle button { background: var(--surface); border: 0; padding: 4px 12px; font: inherit; font-size: 13px; color: var(--muted); cursor: pointer; }
+.seg-toggle button + button { border-left: 1px solid var(--border); }
+.seg-toggle button.active { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.md-preview { border: 1px solid var(--border); border-radius: 9px; padding: 10px 14px; min-height: 168px; background: var(--surface); margin-top: 6px; }
+.md { line-height: 1.5; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p { margin: 0 0 0.7em; }
+.md h1, .md h2, .md h3 { margin: 0.9em 0 0.4em; line-height: 1.25; }
+.md h1 { font-size: 1.3em; }
+.md h2 { font-size: 1.15em; }
+.md h3 { font-size: 1.02em; }
+.md ul, .md ol { margin: 0 0 0.7em; padding-left: 1.4em; }
+.md hr { border: 0; border-top: 1px solid var(--border); margin: 0.9em 0; }
+.md a { color: var(--accent); }
+/* conditions in step contents: {{#Wenn …}} … {{/Wenn}} */
+mark.ph.ph-cond { background: color-mix(in srgb, #7048e8 14%, transparent); color: #6741d9; }
+.condition-form { border: 1px solid var(--border); border-radius: 9px; padding: 10px 12px; margin: 6px 0 10px; background: var(--surface); }
+/* Admin → Logfile */
+.log-changes { margin: 0; padding-left: 16px; }
+.log-changes li { overflow-wrap: anywhere; }
+.log-from { text-decoration: line-through; color: var(--muted); }
+.log-to { color: var(--text); }

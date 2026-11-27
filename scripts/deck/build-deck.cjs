@@ -331,23 +331,30 @@ async function main() {
   }
   {
     const s = content("Journeys", "03 · Journeys", "Testen, bevor ein Kunde es sieht", "Jeder Schritt lässt sich für einen echten Kunden aufbereiten – und jede Antwort des Kunden hat eine Bedeutung.");
-    shot(s, "mau-step-test.png", { x: 0.6, y: 2.15, w: 6.9, h: 2.75 }, { caption: "Schritt testen: alle Platzhalter gefüllt, Bonität vom Service" });
-    shot(s, "mau-feedback-options.png", { x: 7.9, y: 2.15, w: 2.6, h: 4.75 }, { caption: "Feedback-Optionen" });
+    shot(s, "mau-step-test.png", { x: 0.6, y: 2.15, w: 6.6, h: 4.75 }, { caption: "Willkommensbrief für einen Kunden: Bausteine, Bedingungen, Formatierung" });
+    shot(s, "mau-feedback-options.png", { x: 7.6, y: 2.15, w: 2.9, h: 4.75 }, { caption: "Feedback-Optionen" });
     const meanings = [["Lead", "E6F4EA", "2B8A3E"], ["Chance", "E6F4EA", "2B8A3E"], ["Interesse", "E3F4F7", ACCENT], ["Indifferent", "EEF0F4", MUTED], ["Kein Interesse aktuell", "FFF4DB", "8A5A00"], ["Kein Interesse", "FDECEC", RED]];
     s.addText("BEDEUTUNGEN", { x: 10.85, y: 2.2, w: 1.9, h: 0.3, fontSize: 10, bold: true, color: MUTED, charSpacing: 2, margin: 0, isTextBox: true, objectName: "meanings label" });
     meanings.forEach(([t, fill, color], i) => badge(s, t, { x: 10.85, y: 2.6 + i * 0.5, w: 1.9, fill, color, size: 10.5 }));
-    await features(s, [
-      ["braces", "Platzhalter für Kunde, Produkte, Positionen, Transaktionen und Services – auch Listen mit Summen"],
-      ["check", "Gefüllte und fehlende Werte farbig markiert"],
-    ], { x: 0.6, y: 5.45, w: 6.9, rowH: 0.7, size: 13.5 });
     s.addNotes("Die Bedeutungen machen Feedback auswertbar: Leads und Chancen gehen an den Vertrieb, «Kein Interesse aktuell» kommt später wieder.");
+  }
+  {
+    const s = content("Journeys", "03 · Journeys", "Inhalte, die mitdenken", "Formatiert wie ein Brief, mit Bedingungen pro Kunde und Textbausteinen, die man einmal pflegt.");
+    shot(s, "mau-step-editor.png", { x: 0.6, y: 2.15, w: 7.4, h: 4.75 }, { caption: "Schritt bearbeiten: Werkzeugleiste, Textbausteine, «Bedingung einfügen»" });
+    await features(s, [
+      ["sliders", "Fett, Kursiv, Titel, Listen, Links – mit Vorschau; pro Aktion auch «Nur Text», z.B. SMS mit 160 Zeichen"],
+      ["filter", "Bedingungen: «Sehr geehrte Frau» oder «Herr», ein Absatz nur bei Bonität A – per Dialog eingefügt"],
+      ["layers", "Textbausteine für Anrede, Signatur, Rechtliches – einmal ändern, überall aktuell"],
+      ["check", "«Testen» zeigt das Ergebnis für einen echten Kunden und welche Bedingung zutraf"],
+    ], { x: 8.4, y: 2.3, w: 4.35, rowH: 1.05, size: 13.5 });
+    s.addNotes("Das ausführende System erhält den Inhalt als Text und – bei formatierten Aktionen – zusätzlich als HTML.");
   }
 
   // ======== 04 KundenJourneys ========
   pres.addSection({ title: "Kunden Journeys" });
   {
     const s = content("Kunden Journeys", "04 · Kunden Journeys", "Jeden Kunden auf seiner Journey begleiten", "Journey einer Selektion oder einzelnen Kunden zuweisen – und pro Kunde sehen, wo er steht.");
-    shot(s, "mau-cj.png", { x: 0.6, y: 2.15, w: 12.1, h: 4.75 }, { caption: "Links Kampagnen und Events, rechts die KundenJourneys mit Fortschritt, Datenfehlern, «Daten prüfen» und «Ausführen»", center: true });
+    shot(s, "mau-cj.png", { x: 0.6, y: 2.15, w: 12.1, h: 4.75 }, { caption: "Links die Kampagnen und Events, rechts die KundenJourneys mit Fortschritt, Datenfehlern, «Daten prüfen» und «Ausführen»", center: true });
     s.addNotes("Wer die Journey schon aktiv hat, wird beim Zuweisen übersprungen. Die Schritte werden kopiert – spätere Änderungen an der Vorlage verändern laufende Journeys nicht.");
   }
   {
@@ -408,6 +415,17 @@ async function main() {
     await card(s, { x: 7.6, y: 5.45, w: 5.15, h: 1.4, ic: "users", compact: true, title: "Rollen in nexusMAUT", text: "Redaktion arbeitet mit Kunden und Journeys, Admins richten das Modell ein." });
     await card(s, { x: 0.6, y: 5.45, w: 6.6, h: 1.4, ic: "shield", compact: true, title: "Schutz vor Aussperren", text: "Umschalten nur mit eigenem Passwort bzw. konfiguriertem nexusIdentity." });
     s.addNotes("Neue Konten warten, bis ein Admin ihnen eine Rolle gibt. Die erste Person, die sich anmeldet, wird Admin.");
+  }
+  {
+    const s = content("Vertrauen", "Nachvollziehbar", "Jede Änderung im Logfile", "Wer hat was wann geändert – mit dem Wert vorher und nachher. Für Administratoren, mit Filtern.");
+    shot(s, "mau-logfile.png", { x: 0.6, y: 2.15, w: 8.2, h: 4.75 }, { caption: "Administration → Logfile" });
+    await features(s, [
+      ["checklist", "Angelegt, geändert (Feld: vorher → nachher), gelöscht – für alle Bereiche"],
+      ["send", "Auch «Ausführen», «Daten prüfen», Uploads und gestartete Journeys"],
+      ["lock", "Passwörter und Schlüssel erscheinen nie – nur, dass sie geändert wurden"],
+      ["filter", "Filter nach Bereich, Benutzer, Aktion, Zeitraum und Objekt"],
+    ], { x: 9.2, y: 2.3, w: 3.55, rowH: 1.05, size: 13.5 });
+    s.addNotes("Das Logfile entsteht automatisch bei jeder Änderung über die Anwendung – es muss nichts eingerichtet werden.");
   }
   {
     const s = content("Vertrauen", "Sicherheit", "Kundendaten in sicheren Händen", "Daten in Frankfurt, Rechte auf dem Server, nur das Nötige gespeichert.");

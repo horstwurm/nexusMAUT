@@ -15,12 +15,28 @@ export class HttpError extends Error {
 
 export const NO_STORE = { "Cache-Control": "no-store", Pragma: "no-cache" };
 
-/** Wraps a route handler so thrown errors become `{ error }` JSON responses. */
+const MUTATING = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * Wraps a route handler so thrown errors become `{ error }` JSON responses.
+ * Successful changes (POST / PUT / PATCH / DELETE) are written to the Logfile
+ * (changeLog.ts – imported lazily, it needs auth and db).
+ */
 export function route<Ctx>(handler: (req: Request, ctx: Ctx) => Promise<Response>) {
   return async (req: Request, ctx: Ctx) => {
     await connection(); // never prerender
+    const log = MUTATING.has(req.method)
+      ? await import("./changeLog")
+          .then((m) => m.startLog(req))
+          .catch((err) => {
+            console.error("Logfile:", err);
+            return null;
+          })
+      : null;
     try {
-      return await handler(req, ctx);
+      const res = await handler(req, ctx);
+      if (log && res.ok) await log.finish(res).catch((err) => console.error("Logfile:", err));
+      return res;
     } catch (err) {
       unstable_rethrow(err);
       if (err instanceof HttpError) {

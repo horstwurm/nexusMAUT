@@ -1,3 +1,4 @@
+import type { ContentFormat } from "@/lib/contentFormats";
 import type { IdRef, UpdateFrequency } from "@/lib/events";
 import type { JourneyType } from "@/lib/journeyTypes";
 import type { MappedValue } from "@/lib/serviceCall";
@@ -224,6 +225,8 @@ export type CustomerJourneyStepView = {
   stepId: string;
   actionId: string;
   actionName: string;
+  /** the action's content format – how `content` is shown */
+  contentFormat: ContentFormat;
   template: string;
   sort: number;
   status: CustomerJourneyStepStatus;
@@ -260,6 +263,19 @@ export type ExecutionResult = {
   /** not processed in this round (time budget) – press «Ausführen» again */
   remaining: number;
   errors: string[];
+};
+
+export type TextBlockView = {
+  id: string;
+  code: string;
+  label: string;
+  category: string;
+  content: string;
+  /** journey steps whose content refers to it */
+  usedInSteps: number;
+  /** open KundenJourney steps (copied templates) that refer to it */
+  usedInRuns: number;
+  updatedAt: string;
 };
 
 export type EventView = {
@@ -306,6 +322,10 @@ export type ActionView = {
   description: string;
   /** http(s) address or "" */
   url: string;
+  /** how its step contents are written and sent */
+  contentFormat: ContentFormat;
+  /** character limit of a rendered content, null = none */
+  maxChars: number | null;
   updatedAt: string;
   /** number of action attributes */
   attributeCount: number;

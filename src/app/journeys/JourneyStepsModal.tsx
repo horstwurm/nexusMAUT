@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Notice } from "@/components/Notice";
+import { CharCount, FormatToolbar, FormattedContent } from "@/components/Formatting";
 import { PlaceholderPicker, WithPlaceholders } from "@/components/Placeholders";
 import { api, errorText } from "@/lib/client";
 import type { PlaceholderGroup } from "@/lib/placeholders";
@@ -24,6 +25,8 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
   const [testing, setTesting] = useState<JourneyStepView | null>(null);
   const [options, setOptions] = useState<{ step: JourneyStepView; nr: number } | null>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  /** the content editor shows the formatted preview instead of the textarea */
+  const [preview, setPreview] = useState(false);
 
   useEffect(() => {
     Promise.all([api<JourneyStepView[]>(base), api<ActionView[]>("/api/actions"), api<PlaceholderGroup[]>("/api/placeholders")])
@@ -36,6 +39,8 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
   }, [base]);
 
   const actionName = (id: string) => actions.find((a) => a.id === id)?.name ?? "(gelöschte Aktion)";
+  const draftAction = draft ? actions.find((a) => a.id === draft.actionId) : undefined;
+  const formatted = (draftAction?.contentFormat ?? "markdown") === "markdown";
   const close = () => onClose(steps?.length ?? journey.stepCount);
   const noActions = steps !== null && !actions.length;
 
@@ -179,19 +184,50 @@ export function JourneyStepsModal({ journey, onClose }: { journey: JourneyView; 
                 ))}
               </select>
             </label>
-            <label className="field">
-              <span>Inhalt</span>
-              <textarea
-                ref={contentRef}
-                rows={8}
-                maxLength={10_000}
-                value={draft.content}
-                onChange={(e) => setDraft({ ...draft, content: e.target.value })}
-                placeholder="z.B. Guten Tag {{Kunde.Vorname}} {{Kunde.Nachname}} … – Platzhalter unten per Klick einfügen"
-                autoFocus
+            <div className="field">
+              <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end", gap: 8 }}>
+                <span style={{ fontWeight: 600 }}>Inhalt</span>
+                {formatted && (
+                  <div className="seg-toggle" role="tablist" aria-label="Ansicht">
+                    <button type="button" role="tab" aria-selected={!preview} className={!preview ? "active" : ""} onClick={() => setPreview(false)}>
+                      Bearbeiten
+                    </button>
+                    <button type="button" role="tab" aria-selected={preview} className={preview ? "active" : ""} onClick={() => setPreview(true)}>
+                      Vorschau
+                    </button>
+                  </div>
+                )}
+              </div>
+              {formatted && !preview && <FormatToolbar value={draft.content} onChange={(content) => setDraft({ ...draft, content })} textarea={contentRef} />}
+              {formatted && preview ? (
+                <div className="md-preview">
+                  <FormattedContent markdown={draft.content} />
+                </div>
+              ) : (
+                <textarea
+                  ref={contentRef}
+                  rows={8}
+                  maxLength={10_000}
+                  value={draft.content}
+                  onChange={(e) => setDraft({ ...draft, content: e.target.value })}
+                  placeholder="z.B. Guten Tag {{Kunde.Vorname}} {{Kunde.Nachname}} … – Platzhalter unten per Klick einfügen"
+                  aria-label="Inhalt"
+                  autoFocus
+                />
+              )}
+              <CharCount
+                length={draft.content.length}
+                max={draftAction?.maxChars ?? null}
+                hint={
+                  draftAction?.maxChars
+                    ? "Platzhalter ändern die Länge – «Testen» zeigt die Länge für einen Kunden"
+                    : formatted
+                      ? "Formatierung: **fett**, *kursiv*, ## Titel, - Liste, 1. Liste, [Link](https://…)"
+                      : "Nur Text – diese Aktion erhält keine Formatierung"
+                }
               />
-              <span className="hint">{draft.content.length.toLocaleString("de-CH")} / {(10_000).toLocaleString("de-CH")} Zeichen</span>
-            </label>
+            </div>
+            {!preview || !formatted ? null : <p className="small muted">Platzhalter erscheinen hervorgehoben; gefüllt werden sie beim Testen.</p>}
             <PlaceholderPicker catalog={catalog} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} textarea={contentRef} />
             <div className="row" style={{ justifyContent: "flex-end" }}>
               <button type="button" className="btn" onClick={() => setDraft(null)}>

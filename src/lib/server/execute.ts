@@ -1,9 +1,11 @@
 import "server-only";
+import { contentHtml } from "@/lib/contentFormats";
 import type { ObjectId } from "mongodb";
 import type { ExecutionPreview, ExecutionResult } from "@/lib/types";
 import { dataResult, updateRunStatus } from "./customerJourneys";
 import { collections, type ActionDoc, type CustomerJourneyDoc, type CustomerJourneyStepDoc } from "./db";
 import { appUrl, HttpError } from "./http";
+import { rendered, rulesOf } from "./stepContent";
 import { previewStep, type ServiceCache, type StepPreview } from "./stepPreview";
 
 // «Ausführen» on the KundenJourneys page: every step «Bereit zur Ausführung»
@@ -19,8 +21,6 @@ const SEND_TIMEOUT_MS = 10_000;
 const TIME_BUDGET_MS = 40_000;
 const PARALLEL = 4;
 
-const textOf = (p: StepPreview) => p.segments.map((s) => (s.kind === "text" ? s.text : (s.value ?? s.token))).join("");
-const unfilledOf = (p: StepPreview) => p.segments.flatMap((s) => (s.kind === "placeholder" && s.value === null ? [s.token] : []));
 
 /** The JSON a step is handed to its action with (also shown in «API»). */
 export async function actionPayload(run: CustomerJourneyDoc, step: CustomerJourneyStepDoc, content: string, unfilled: string[], action: ActionDoc | null) {
@@ -36,7 +36,11 @@ export async function actionPayload(run: CustomerJourneyDoc, step: CustomerJourn
     journey: journey?.name ?? "(gelöschte Journey)",
     action: action?.name ?? "(gelöschte Aktion)",
     customer: { id: run.customerId.toHexString(), vorname: customer?.name ?? "", nachname: customer?.lastname ?? "" },
+    /** «markdown» (formatted, see contentHtml) or «text» – Admin → Aktionen */
+    contentFormat: rulesOf(action).contentFormat,
     content,
+    /** the formatted content as HTML; null for «Nur Text» */
+    contentHtml: contentHtml(content, rulesOf(action).contentFormat),
     unfilled,
     feedbackOptions: options.map((o) => ({ option: o.option, meaning: o.meaning })),
     feedbackUrl: `${appUrl()}/api/customer-journeys/${run._id.toHexString()}/steps/${step._id.toHexString()}/feedbacks`,
@@ -58,9 +62,9 @@ export async function actionRequest(runId: ObjectId, stepId: ObjectId) {
     content = step.content!;
     unfilled = step.unfilled ?? [];
   } else {
-    const preview = await previewStep(step.template, run.customerId);
-    content = textOf(preview);
-    unfilled = unfilledOf(preview);
+    const r = rendered(await previewStep(step.template, run.customerId, undefined, rulesOf(action).contentFormat), rulesOf(action));
+    content = r.content;
+    unfilled = r.unfilled;
   }
   return {
     action: { name: action?.name ?? "(gelöschte Aktion)", url: action?.url ?? "" },
@@ -148,7 +152,7 @@ export async function executeJourney(journeyId: ObjectId, userId: string): Promi
       const now = new Date();
       let preview: StepPreview;
       try {
-        preview = await previewStep(step.template, run.customerId, cache);
+        preview = await previewStep(step.template, run.customerId, cache, rulesOf(action).contentFormat);
       } catch (err) {
         result.failed++;
         result.errors.push(`${action.name}: ${err instanceof Error ? err.message : "Aufbereiten fehlgeschlagen"}`);
@@ -161,8 +165,7 @@ export async function executeJourney(journeyId: ObjectId, userId: string): Promi
         result.dataErrors++;
         continue;
       }
-      const content = textOf(preview);
-      const unfilled = unfilledOf(preview);
+      const { content, unfilled } = rendered(preview, rulesOf(action));
       const r = await send(action.url, await actionPayload(run, step, content, unfilled, action));
       const execution = { at: new Date(), ok: r.ok, url: action.url, ...(r.httpStatus && { httpStatus: r.httpStatus }), ...(r.error && { error: r.error }), by: userId };
       if (r.ok) {

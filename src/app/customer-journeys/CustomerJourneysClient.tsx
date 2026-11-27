@@ -7,6 +7,7 @@ import { StepPreviewResult, type Preview } from "@/app/journeys/StepTestModal";
 import { api, errorText, formatDate } from "@/lib/client";
 import { MeaningBadge } from "@/app/journeys/FeedbackOptionsModal";
 import { MappedTable, prettyJson } from "@/app/admin/ServiceCallModal";
+import { FormattedContent } from "@/components/Formatting";
 import { ExecuteModal } from "./ExecuteModal";
 import { FeedbackApiModal } from "./FeedbackApiModal";
 import { STEP_STATUSES, STEP_STATUS_INFO, type StepStatus } from "@/lib/stepStatus";
@@ -90,7 +91,7 @@ export function CustomerJourneysClient({
   return (
     <div className="side-layout">
       <div className="side-col">
-        {panel("Kampagnen", "Kunden Journeys", campaigns, "Noch keine Journeys vom Typ «Kampagne» – unter «Journeys» anlegen.")}
+        {panel("Kampagnen", "Kampagnen", campaigns, "Noch keine Journeys vom Typ «Kampagne» – unter «Journeys» anlegen.")}
         {panel("Events", "Events", eventJourneys, "Noch keine Journeys vom Typ «Event» – unter «Journeys» anlegen.")}
       </div>
 
@@ -774,9 +775,15 @@ function RunSteps({ runId, onChange }: { runId: string; onChange: (row: Customer
                 <td className="small" style={{ maxWidth: 560 }}>
                   {s.status === "done" && s.content !== null ? (
                     <>
-                      <div className="step-preview" style={{ maxHeight: 180, marginBottom: 4 }}>
-                        {s.content || <span className="muted">(leer)</span>}
-                      </div>
+                      {s.contentFormat === "markdown" && s.content ? (
+                        <div className="step-preview" style={{ maxHeight: 180, marginBottom: 4, whiteSpace: "normal" }}>
+                          <FormattedContent markdown={s.content} />
+                        </div>
+                      ) : (
+                        <div className="step-preview" style={{ maxHeight: 180, marginBottom: 4 }}>
+                          {s.content || <span className="muted">(leer)</span>}
+                        </div>
+                      )}
                       {s.unfilled.length > 0 && <div style={{ color: "var(--warn)" }}>Ohne Wert: {s.unfilled.join(", ")}</div>}
                     </>
                   ) : s.template ? (

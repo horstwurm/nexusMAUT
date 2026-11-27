@@ -9,6 +9,16 @@ Marketing-Automation für die nexus-Anwendungen – live auf <https://nexus-maut
 - **Journeys** sind Folgen von Schritten: Aktion, Inhalt mit Platzhaltern und
   **Feedback-Optionen** (Lead, Chance, Interesse, Indifferent, Kein Interesse aktuell,
   Kein Interesse).
+- **Inhalte formatieren:** Fett, Kursiv, Titel, Listen, Links und Trennlinien (Markdown) mit
+  Werkzeugleiste und Vorschau – pro Aktion «Formatiert» oder «Nur Text», optional mit
+  Zeichengrenze (z.B. 160 für SMS).
+- **Bedingungen im Inhalt:** `{{#Wenn Kunde.Anrede = "Frau"}} … {{#Sonst}} … {{/Wenn}}` –
+  z.B. Anrede nach Geschlecht oder ein Absatz nur für Hypothekarkunden; per Dialog einfügbar,
+  «Testen» zeigt, welche Bedingung zutraf.
+- **Textbausteine** (Administration): wiederverwendbare Teile wie Anrede, Signatur oder
+  rechtlicher Hinweis, im Schritt als `{{Baustein.code}}` – mit Platzhaltern, Bedingungen
+  und Formatierung; Änderungen gelten sofort für alle offenen Schritte, für «Nur Text»-Aktionen
+  ohne Formatierung.
 - **Journeys** sind vom Typ **Kampagne** (Kunden werden per Selektion oder einzeln zugewiesen)
   oder **Event** (gestartet von einem Event).
 - **Kunden Journeys** begleiten jeden Kunden: Status pro Schritt (Vorschlag, Bereit zur
@@ -18,6 +28,9 @@ Marketing-Automation für die nexus-Anwendungen – live auf <https://nexus-maut
   oder Transaktion) und Event-Journey; «Service jetzt aufrufen» zeigt den letzten Aufruf,
   «Journeys starten» startet die Journey für die genannten Kunden. Im Mock-Modus liefert der
   Trigger-Service echte IDs. Regelmässiges automatisches Abfragen folgt später.
+- **Logfile** (Administration): jede Änderung mit wer, wann, was – angelegt, geändert
+  (Feld: vorher → nachher) oder gelöscht, dazu «Ausführen», «Daten prüfen», Uploads;
+  Passwörter und Schlüssel nie im Klartext. Filter nach Bereich, Benutzer, Aktion, Zeitraum.
 - **Data Management:** Initial Upload von Kunden, Positionen und Transaktionen aus CSV,
   Excel oder JSON (Test, Quellname, Fortschritt, frühere Uploads löschen); jeder Datensatz
   zeigt seine Quelle (Upload oder «Manuell»).
@@ -70,7 +83,8 @@ Für nexusIdentity dort eine *vertrauliche* Anwendung anlegen mit Redirect-URI
 ## Schnittstellen für andere Systeme
 
 - **Aktion ausführen:** «Ausführen» sendet pro Schritt ein `POST` mit JSON (Inhalt für den
-  Kunden, Kunde, Feedback-Optionen, `feedbackUrl`) an die URL der Aktion. Antwort 2xx →
+  Kunden als `content`, bei formatierten Aktionen zusätzlich als HTML in `contentHtml`,
+  `contentFormat`, Kunde, Feedback-Optionen, `feedbackUrl`) an die URL der Aktion. Antwort 2xx →
   Schritt erledigt. Das genaue Format zeigt «API» bei jedem Schritt.
 - **Feedback zurückmelden:** `POST {feedbackUrl}` mit
   `{ "feedback": "…", "feedbackComment": "", "feedbackRating": null }` und
@@ -80,7 +94,7 @@ Für nexusIdentity dort eine *vertrauliche* Anwendung anlegen mit Redirect-URI
 
 ## Verkaufspräsentation
 
-[`nexusMAUT-Uebersicht.pptx`](nexusMAUT-Uebersicht.pptx) – 19 Folien auf Deutsch, erzeugt mit
+[`nexusMAUT-Uebersicht.pptx`](nexusMAUT-Uebersicht.pptx) – 21 Folien auf Deutsch, erzeugt mit
 `node scripts/deck/build-deck.cjs`. Die Screenshots stammen aus einer Demo-Datenbank mit
 fiktiven Kunden, nie aus den produktiven Daten (Ablauf in [CLAUDE.md](CLAUDE.md)).
 

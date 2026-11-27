@@ -4,13 +4,20 @@ import { Fragment, useEffect, useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText } from "@/lib/client";
 import { formatDay } from "@/lib/customers";
-import type { Segment } from "@/lib/placeholders";
+import type { ConditionTrace, Segment } from "@/lib/placeholders";
+import { CharCount, FormattedContent } from "@/components/Formatting";
+import type { ContentRules } from "@/lib/contentFormats";
 import type { Customer, JourneyStepView } from "@/lib/types";
 
 export type Preview = {
   customer: { id: string; name: string };
   segments: Segment[];
   services: { name: string; status: "ok" | "sample" | "error"; message?: string; sent?: Record<string, unknown> }[];
+  /** the action's content rules and the rendered content (text; Markdown for formatted actions) */
+  rules?: ContentRules;
+  content?: string;
+  /** how the conditions ({{#Wenn …}}) were decided */
+  conditions?: ConditionTrace[];
 };
 
 /** «Testen» of a journey step: choose a customer, see the content with placeholders filled. */
@@ -19,11 +26,16 @@ export function StepTestModal({
   step,
   actionName,
   onClose,
+  testUrl,
+  title,
 }: {
-  journeyId: string;
-  step: JourneyStepView;
-  actionName: string;
+  journeyId?: string;
+  step?: JourneyStepView;
+  actionName?: string;
   onClose: () => void;
+  /** another test endpoint (e.g. a text building block) – default: the journey step's */
+  testUrl?: string;
+  title?: string;
 }) {
   const [q, setQ] = useState("");
   const [customers, setCustomers] = useState<Customer[] | null>(null);
@@ -50,7 +62,7 @@ export function StepTestModal({
     setError(null);
     setPreview(null);
     try {
-      setPreview(await api<Preview>(`/api/journeys/${journeyId}/steps/${step.id}/test`, { body: { customerId } }));
+      setPreview(await api<Preview>(testUrl ?? `/api/journeys/${journeyId}/steps/${step!.id}/test`, { body: { customerId } }));
     } catch (err) {
       setError(errorText(err));
     } finally {
@@ -61,7 +73,7 @@ export function StepTestModal({
   return (
     <div className="modal-back" onClick={onClose}>
       <div className="modal modal-wide" style={{ maxWidth: 980 }} onClick={(e) => e.stopPropagation()}>
-        <h2>Schritt testen – {actionName}</h2>
+        <h2>{title ?? `Schritt testen – ${actionName}`}</h2>
         <p className="small muted">Der Inhalt wird für einen Kunden aufbereitet: Platzhalter werden mit seinen Daten gefüllt, verwendete Services aufgerufen.</p>
         <Notice kind="error">{error}</Notice>
 
@@ -124,6 +136,10 @@ export function StepTestModal({
 export function StepPreviewResult({ preview }: { preview: Preview }) {
   const placeholders = preview.segments.filter((s): s is Extract<Segment, { kind: "placeholder" }> => s.kind === "placeholder");
   const missing = placeholders.filter((p) => p.value === null);
+  const formatted = preview.rules?.contentFormat === "markdown";
+  // formatted actions: the result as the customer gets it, or the placeholders highlighted
+  const [view, setView] = useState<"formatted" | "placeholders">("formatted");
+  const text = preview.content ?? preview.segments.map((s) => (s.kind === "text" ? s.text : (s.value ?? s.token))).join("");
   return (
     <>
         <h3>
@@ -132,6 +148,21 @@ export function StepPreviewResult({ preview }: { preview: Preview }) {
             · {placeholders.length - missing.length} von {placeholders.length} Platzhaltern gefüllt
           </span>
         </h3>
+        {formatted && (
+          <div className="seg-toggle" role="tablist" aria-label="Ansicht" style={{ marginBottom: 8 }}>
+            <button type="button" role="tab" aria-selected={view === "formatted"} className={view === "formatted" ? "active" : ""} onClick={() => setView("formatted")}>
+              Formatiert
+            </button>
+            <button type="button" role="tab" aria-selected={view === "placeholders"} className={view === "placeholders" ? "active" : ""} onClick={() => setView("placeholders")}>
+              Platzhalter
+            </button>
+          </div>
+        )}
+        {formatted && view === "formatted" ? (
+          <div className="step-preview" style={{ whiteSpace: "normal" }}>
+            <FormattedContent markdown={text} />
+          </div>
+        ) : (
         <div className="step-preview">
           {preview.segments.map((s, i) =>
             s.kind === "text" ? (
@@ -148,6 +179,12 @@ export function StepPreviewResult({ preview }: { preview: Preview }) {
           )}
           {!preview.segments.length && <span className="muted">(kein Inhalt)</span>}
         </div>
+        )}
+        {preview.rules && (
+          <div style={{ margin: "-6px 0 12px" }}>
+            <CharCount length={text.length} max={preview.rules.maxChars} hint={formatted ? "inkl. Formatierungszeichen" : undefined} />
+          </div>
+        )}
 
         {missing.length > 0 && (
           <Notice kind="warn">
@@ -159,6 +196,24 @@ export function StepPreviewResult({ preview }: { preview: Preview }) {
               </span>
             ))}
           </Notice>
+        )}
+
+        {(preview.conditions?.length ?? 0) > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <h4 style={{ margin: "0 0 6px" }}>Bedingungen</h4>
+            {preview.conditions!.map((c, i) => (
+              <div key={i} className="small" style={{ marginBottom: 4 }}>
+                <span className={`badge ${c.result === true ? "badge-ok" : c.result === false ? "" : "badge-danger"}`}>
+                  {c.result === true ? (c.condition === "Sonst" ? "Sonst" : "trifft zu") : c.result === false ? "trifft nicht zu" : "Fehler"}
+                </span>{" "}
+                {c.condition !== "Sonst" && <code>{c.condition}</code>}
+                {c.result !== null && c.condition !== "Sonst" && (
+                  <span className="muted"> – Wert: {c.value === null ? "keiner" : `«${c.value}»`}</span>
+                )}
+                {c.note && <span className="muted"> – {c.note}</span>}
+              </div>
+            ))}
+          </div>
         )}
 
         {preview.services.length > 0 && (

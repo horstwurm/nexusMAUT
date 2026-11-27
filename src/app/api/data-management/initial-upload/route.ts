@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/server/auth";
+import { writeLog } from "@/lib/server/changeLog";
 import { appUrl, HttpError, NO_STORE, parseId, route } from "@/lib/server/http";
 import { assertSourceNameFree, planUpload, readSources, runUpload, sourceNameOf } from "@/lib/server/initialUpload";
 import type { UploadResult } from "@/lib/types";
@@ -56,6 +57,20 @@ export const POST = route(async (req: Request) => {
           line({ progress, label });
         });
         line({ result });
+        // Logfile (the wrapper doesn't read streamed answers)
+        const cr = result.created;
+        await writeLog(
+          {
+            area: "Data Management",
+            entityId: "",
+            entityName: name,
+            action: "uploaded",
+            changes: [],
+            note: cr ? `${cr.customers} Kunden, ${cr.positions} Positionen, ${cr.transactions} Transaktionen (${src.source.toUpperCase()})` : "",
+            link: "/admin?tab=data",
+          },
+          { id: user._id, name: user.name, email: user.email },
+        );
       } catch (err) {
         console.error("[upload]", err);
         line({ error: err instanceof HttpError ? err.message : "Interner Serverfehler beim Upload", status: err instanceof HttpError ? err.status : 500 });

@@ -96,6 +96,20 @@ const karte = await action("Geburtstagskarte", "Karte mit Gutschein zum Geburtst
 await call(`/api/actions/${anruf}/api-key`, { body: {} });
 await call(`/api/actions/${brief}/api-key`, { body: {} });
 
+// ---- text blocks (Textbausteine) and an SMS action (plain text, 160 characters) ----
+await call("/api/text-blocks", {
+  body: {
+    code: "anrede",
+    label: "Anrede",
+    category: "Anrede",
+    content: '{{#Wenn Kunde.Anrede = "Frau"}}Sehr geehrte Frau {{Kunde.Nachname}}{{#Sonst Kunde.Anrede = "Herr"}}Sehr geehrter Herr {{Kunde.Nachname}}{{#Sonst}}Guten Tag {{Kunde.Vorname}} {{Kunde.Nachname}}{{/Wenn}}',
+  },
+});
+await call("/api/text-blocks", {
+  body: { code: "signatur", label: "Signatur Kundencenter", category: "Signatur", content: "Freundliche Grüsse\n\n**Ihr Kundencenter der Musterbank**\n[www.musterbank.example](https://www.musterbank.example)" },
+});
+await call("/api/actions", { body: { name: "SMS-Erinnerung", description: "Kurze Erinnerung per SMS", url: "https://sms.example.com/api/send", contentFormat: "text", maxChars: 160 } });
+
 // ---- Kunden Selektionen ----
 const types = (await call("/api/domains?domain=productServiceType")).json;
 const typeId = (code) => types.find((t) => t.code === code).id;
@@ -128,7 +142,11 @@ const journey = async (name, description, steps, journeyType = "campaign") => {
 };
 const OPTS_CALL = [["Termin vereinbart", "LEAD"], ["Offerte gewünscht", "CHANCE"], ["Interessiert, später melden", "INTEREST"], ["Nicht erreicht", "INDIFFERENT"], ["Im Moment kein Bedarf", "NO_INTEREST_NOW"], ["Kein Interesse", "NO_INTEREST"]];
 const willkommen = await journey("Willkommen Neukunden", "Begrüssung, erster Kontakt und Einladung zum Finanz-Check", [
-  [brief, "Guten Tag {{Kunde.Anrede}} {{Kunde.Nachname}}\n\nHerzlich willkommen bei der Musterbank! Ihre Produkte: {{Produkt.Name}}.\nWir freuen uns, Sie zu begleiten.\n\nFreundliche Grüsse\nIhre Musterbank", [["Rückmeldung erhalten", "INTEREST"], ["Kein Interesse", "NO_INTEREST"]]],
+  [
+    brief,
+    "{{Baustein.anrede}}\n\n## Herzlich willkommen bei der Musterbank!\n\nWir freuen uns, Sie zu begleiten. **Ihre Produkte:** {{Produkt.Name}}\n\n{{#Wenn Kunde.Bonität = \"A\"}}\nAls Kundin oder Kunde mit *bester Bonität* laden wir Sie zu einem persönlichen Finanz-Check ein.\n{{/Wenn}}\n\n{{Baustein.signatur}}",
+    [["Rückmeldung erhalten", "INTEREST"], ["Kein Interesse", "NO_INTEREST"]],
+  ],
   [anruf, "Anruf bei {{Kunde.Vorname}} {{Kunde.Nachname}} ({{Kunde.Alter}} Jahre): Fragen zum Start klären, Kreditkarte und Sparkonto anbieten. Bonität: {{Kunde.Bonität}}.", OPTS_CALL],
   [termin, "{{Kunde.Anrede}} {{Kunde.Nachname}}, wir laden Sie zu einem kostenlosen Finanz-Check ein – 30 Minuten, bei Ihnen oder online.", [["Termin gebucht", "LEAD"], ["Später", "NO_INTEREST_NOW"], ["Abgelehnt", "NO_INTEREST"]]],
 ]);

@@ -1,5 +1,7 @@
 import "server-only";
+import { CONTENT_FORMATS } from "@/lib/contentFormats";
 import { ID_REFS, UPDATE_FREQUENCIES } from "@/lib/events";
+import { TEXT_BLOCK_CODE_RE } from "@/lib/textBlocks";
 import { JOURNEY_TYPES } from "@/lib/journeyTypes";
 import { z } from "zod";
 import { dateOfBirthError } from "@/lib/customers";
@@ -165,6 +167,9 @@ export const actionInput = z.object({
   name: z.string().trim().min(1, "Name fehlt").max(120),
   description: z.string().trim().max(2000).default(""),
   url: optionalUrl,
+  contentFormat: z.enum(CONTENT_FORMATS, "Inhaltsformat wählen").default("markdown"),
+  /** character limit of a rendered content; null = none */
+  maxChars: z.number("Zeichengrenze: eine Zahl").int("Zeichengrenze: eine ganze Zahl").min(1, "Zeichengrenze: mindestens 1").max(10_000, "Zeichengrenze: höchstens 10'000").nullable().default(null),
 });
 
 export const eventInput = z.object({
@@ -174,6 +179,17 @@ export const eventInput = z.object({
   updateFrequency: z.enum(UPDATE_FREQUENCIES, "Aktualisierung wählen"),
   idRef: z.enum(ID_REFS, "ID-Bezug wählen").default("customer"),
   journeyId: z.string("Journey wählen").regex(/^[0-9a-f]{24}$/, "Journey wählen"),
+});
+
+export const textBlockInput = z.object({
+  /** only on create – fixed afterwards */
+  code: z.string().trim().toLowerCase().regex(TEXT_BLOCK_CODE_RE, "Code: Kleinbuchstaben, Ziffern, - und _ (max. 40)").optional(),
+  label: z.string().trim().min(1, "Bezeichnung fehlt").max(120),
+  category: z.string().trim().max(60).default(""),
+  content: z
+    .string()
+    .max(10_000, "Inhalt: höchstens 10'000 Zeichen")
+    .refine((v) => !/\{\{\s*Baustein\./i.test(v), "Ein Textbaustein kann keinen anderen Textbaustein enthalten"),
 });
 
 // --- e-mail settings (Admin) ------------------------------------------------------------

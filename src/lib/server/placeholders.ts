@@ -7,13 +7,14 @@ import { attributesByType, domainValues } from "./domains";
 /** The placeholder catalog from the attributes currently defined in Admin. */
 export async function placeholderCatalog() {
   const types = await domainValues("productServiceType");
-  const { services, serviceGetAttributes } = await collections();
-  const [customerAttributes, positionAttributes, trxAttributes, serviceList, getAttrs] = await Promise.all([
+  const { services, serviceGetAttributes, textBlocks } = await collections();
+  const [customerAttributes, positionAttributes, trxAttributes, serviceList, getAttrs, blocks] = await Promise.all([
     customerAttributeDefs(),
     attributesByType(types, "position"),
     attributesByType(types, "trx"),
     services.find({}, { collation: { locale: "de" } }).sort({ name: 1 }).toArray(),
     serviceGetAttributes.find().sort({ sort: 1, attribute: 1 }).toArray(),
+    textBlocks.find({}, { projection: { code: 1, label: 1, category: 1 }, collation: { locale: "de" } }).sort({ category: 1, label: 1 }).toArray(),
   ]);
   return buildCatalog({
     customerAttributes,
@@ -25,7 +26,8 @@ export async function placeholderCatalog() {
       // values and lists (lists → block, count, sum, first row)
       getAttributes: getAttrs
         .filter((a) => a.serviceId.equals(s._id))
-        .map((a) => ({ attribute: a.attribute, attributeType: a.attributeType, list: a.list ? { columns: a.list.columns } : null })),
+        .map((a) => ({ attribute: a.attribute, attributeType: a.attributeType, options: a.options, list: a.list ? { columns: a.list.columns } : null })),
     })),
+    textBlocks: blocks.map((b) => ({ code: b.code, label: b.label, category: b.category })),
   });
 }

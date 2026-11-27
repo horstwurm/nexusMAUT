@@ -1,5 +1,6 @@
 import "server-only";
 import type { ObjectId } from "mongodb";
+import { contentFormatOf } from "@/lib/contentFormats";
 import type { ActionView } from "@/lib/types";
 import { collections, type ActionAttributeDoc, type ActionDoc } from "./db";
 import { toTypeAttribute } from "./domains";
@@ -10,6 +11,8 @@ export const toAction = (a: ActionDoc, attributeCount = 0): ActionView => ({
   name: a.name,
   description: a.description,
   url: a.url ?? "",
+  contentFormat: contentFormatOf(a),
+  maxChars: a.maxChars ?? null,
   updatedAt: a.updatedAt.toISOString(),
   attributeCount,
   apiKey: a.apiKey

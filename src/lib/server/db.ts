@@ -1,4 +1,5 @@
 import "server-only";
+import type { ContentFormat } from "@/lib/contentFormats";
 import type { IdRef, UpdateFrequency } from "@/lib/events";
 import type { JourneyType } from "@/lib/journeyTypes";
 import type { MappedValue } from "@/lib/serviceCall";
@@ -403,6 +404,10 @@ export type ActionDoc = {
   description: string;
   /** http(s) address; "" = none (missing on actions created before 2026-11-21) */
   url?: string;
+  /** how its step contents are written and sent: markdown (formatted) | text; missing = markdown */
+  contentFormat?: ContentFormat;
+  /** character limit of a rendered content (e.g. 160 for SMS); missing / null = none */
+  maxChars?: number | null;
   /**
    * API key of the system that carries out the action – lets it set the
    * feedback of KundenJourney steps with this action (`Authorization: Bearer`).
@@ -419,6 +424,44 @@ export type ActionDoc = {
  * that reports it; `updateFrequency` = how often that service is to be asked;
  * `journeyId` = the journey the event belongs to (missing on events created before it was added).
  */
+/** One entry of the Logfile (Admin → Logfile, src/lib/server/changeLog.ts): who changed what, when. */
+export type ChangeLogDoc = {
+  _id: ObjectId;
+  at: Date;
+  /** null = System (no logged-in user) */
+  userId: string | null;
+  /** as it was at the time – entries stay readable after a user is deleted */
+  userName: string;
+  userEmail: string;
+  /** e.g. «Kunde», «Journey-Schritt», «Anmeldung» */
+  area: string;
+  entityId: string;
+  /** the record's name as it was */
+  entityName: string;
+  /** LOG_ACTIONS code */
+  action: string;
+  /** field-level differences (updates); "" = empty */
+  changes: { field: string; from: string; to: string }[];
+  note: string;
+  /** a page showing the record, if any */
+  link: string | null;
+};
+
+/**
+ * A text building block (Textbaustein, Admin): reusable step content part, referenced as
+ * {{Baustein.<code>}} (src/lib/textBlocks.ts). `code` fixed after creation, unique (case-insensitive).
+ */
+export type TextBlockDoc = {
+  _id: ObjectId;
+  code: string;
+  label: string;
+  category: string;
+  /** Markdown with placeholders and conditions; no other block */
+  content: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 /** One call of an event's trigger service (GET, no input values). */
 export type EventCall = {
   at: Date;
@@ -667,6 +710,10 @@ async function init(db: Db) {
     c.actionAttributes.createIndex({ actionId: 1, sort: 1 }),
     c.events.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "event_name_unique" }),
     c.events.createIndex({ serviceId: 1 }),
+    c.changeLogs.createIndex({ at: -1 }),
+    c.changeLogs.createIndex({ area: 1, at: -1 }),
+    c.changeLogs.createIndex({ userId: 1, at: -1 }),
+    c.textBlocks.createIndex({ code: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "text_block_code_unique" }),
     c.events.createIndex({ journeyId: 1 }),
     c.journeys.createIndex({ name: 1 }, { unique: true, collation: { locale: "de", strength: 2 }, name: "journey_name_unique" }),
     c.journeySteps.createIndex({ journeyId: 1, sort: 1 }),
@@ -723,6 +770,8 @@ function collectionsOf(db: Db) {
     authSettings: db.collection<AuthSettingsDoc>("settings"),
     actionAttributes: db.collection<ActionAttributeDoc>("actionAttributes"),
     events: db.collection<EventDoc>("events"),
+    textBlocks: db.collection<TextBlockDoc>("textBlocks"),
+    changeLogs: db.collection<ChangeLogDoc>("changeLogs"),
     journeys: db.collection<JourneyDoc>("journeys"),
     journeySteps: db.collection<JourneyStepDoc>("journeySteps"),
     feedbackOptions: db.collection<JourneyStepFeedbackOptionDoc>("journeyStepFeedbackOptions"),

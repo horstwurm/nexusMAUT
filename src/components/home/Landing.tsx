@@ -47,6 +47,9 @@ const AREAS: Area[] = [
     features: [
       { icon: "steps", text: "Schritte in fester Reihenfolge, jeder mit einer Aktion (z.B. Brief, Anruf, Termin)" },
       { icon: "braces", text: "Platzhalter für Kunde, Produkte, Positionen, Transaktionen und Service-Werte – auch Listen mit Summen und Wiederholblöcken" },
+      { icon: "filter", text: "Bedingungen im Inhalt: «Sehr geehrte Frau» oder «Sehr geehrter Herr», ein Absatz nur für Hypothekarkunden – per Dialog eingefügt, beim Testen nachvollziehbar" },
+      { icon: "layers", text: "Textbausteine für Anrede, Signatur oder rechtliche Hinweise – einmal pflegen, in allen Schritten aktuell" },
+      { icon: "sliders", text: "Formatieren mit Werkzeugleiste und Vorschau: Fett, Kursiv, Titel, Listen, Links – pro Aktion auch «Nur Text», z.B. für SMS mit Zeichengrenze" },
       { icon: "check", text: "Schritt testen: der Inhalt, aufbereitet für einen echten Kunden" },
       { icon: "message", text: "Feedback-Optionen pro Schritt – die möglichen Antworten des Kunden, jede eingestuft von Lead und Chance über Interesse bis Kein Interesse" },
       { icon: "alert", text: "Unbekannte Platzhalter werden markiert, bevor sie jemand sieht" },
@@ -164,6 +167,7 @@ const SECURITY = (mode: AuthMode): { icon: HomeIconName; title: string; text: st
   { icon: "lock", title: "Verschlüsselte Geheimnisse", text: "Das SMTP-Passwort wird mit AES-256-GCM verschlüsselt gespeichert und nie an die Seite geschickt." },
   { icon: "server", title: "Services auf dem Server", text: "Services werden serverseitig aufgerufen; ihre Adressen legen nur Administratoren fest." },
   { icon: "key", title: "API-Schlüssel pro Aktion", text: "Externe Systeme melden Feedback nur für Schritte ihrer eigenen Aktion; gespeichert wird nur ein Hash, Widerrufen geht mit einem Klick." },
+  { icon: "checklist", title: "Logfile", text: "Jede Änderung mit wer, wann und was – vorher und nachher, für Administratoren nachvollziehbar. Passwörter und Schlüssel erscheinen nie." },
   { icon: "eye", title: "Kein Tracking", text: "Keine Analyse-, Werbe- oder Tracking-Cookies – nur das Anmelde-Cookie." },
 ];
 

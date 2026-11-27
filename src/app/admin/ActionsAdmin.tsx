@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { Notice } from "@/components/Notice";
 import { api, errorText, formatDate } from "@/lib/client";
+import { CONTENT_FORMAT_LABELS, CONTENT_FORMATS, type ContentFormat } from "@/lib/contentFormats";
 import type { ActionView } from "@/lib/types";
 import { AttributesModal } from "./TypeAttributesModal";
 
-type Draft = { id: string | null; name: string; description: string; url: string };
-const EMPTY: Draft = { id: null, name: "", description: "", url: "" };
+type Draft = { id: string | null; name: string; description: string; url: string; contentFormat: ContentFormat; maxChars: string };
+const EMPTY: Draft = { id: null, name: "", description: "", url: "", contentFormat: "markdown", maxChars: "" };
 
 /** Admin card for the actions (Aktionen): name, description, URL, attributes and the API key for the feedback API. */
 export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
@@ -92,6 +93,7 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
                 <th>Name</th>
                 <th>Beschreibung</th>
                 <th>URL</th>
+                <th>Inhalt</th>
                 <th>API-Schlüssel</th>
                 <th>Geändert</th>
                 <th />
@@ -114,6 +116,10 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
                     ) : (
                       <span className="muted">–</span>
                     )}
+                  </td>
+                  <td className="small" style={{ whiteSpace: "nowrap" }}>
+                    <span className={`badge ${a.contentFormat === "markdown" ? "badge-accent" : ""}`}>{a.contentFormat === "markdown" ? "Formatiert" : "Nur Text"}</span>
+                    {a.maxChars !== null && <div className="muted">max. {a.maxChars.toLocaleString("de-CH")} Zeichen</div>}
                   </td>
                   <td className="small" style={{ whiteSpace: "nowrap" }}>
                     {a.apiKey ? (
@@ -150,7 +156,9 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
                       <button className="btn btn-sm" disabled={busy} onClick={() => setAttributesOf(a)} title="Attribute dieser Aktion verwalten">
                         Attribute ({a.attributeCount})
                       </button>
-                      <button className="btn btn-sm" disabled={busy} onClick={() => setDraft({ id: a.id, name: a.name, description: a.description, url: a.url })}>
+                      <button className="btn btn-sm" disabled={busy} onClick={() =>
+                          setDraft({ id: a.id, name: a.name, description: a.description, url: a.url, contentFormat: a.contentFormat, maxChars: a.maxChars === null ? "" : String(a.maxChars) })
+                        }>
                         Bearbeiten
                       </button>
                       <button
@@ -192,7 +200,13 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
         style={{ marginTop: 16 }}
         onSubmit={async (e) => {
           e.preventDefault();
-          const body = { name: draft.name, description: draft.description, url: draft.url };
+          const body = {
+            name: draft.name,
+            description: draft.description,
+            url: draft.url,
+            contentFormat: draft.contentFormat,
+            maxChars: draft.maxChars.trim() ? Number(draft.maxChars) : null,
+          };
           const ok = await act(() => api(draft.id ? `/api/actions/${draft.id}` : "/api/actions", { method: draft.id ? "PUT" : "POST", body }));
           if (ok) setDraft(EMPTY);
         }}
@@ -217,6 +231,35 @@ export function ActionsAdmin({ initial }: { initial: ActionView[] }) {
             placeholder="https://… (optional)"
           />
         </label>
+        <div className="grid2">
+          <label className="field">
+            <span>Inhaltsformat</span>
+            <select value={draft.contentFormat} onChange={(e) => setDraft({ ...draft, contentFormat: e.target.value as ContentFormat })}>
+              {CONTENT_FORMATS.map((f) => (
+                <option key={f} value={f}>
+                  {CONTENT_FORMAT_LABELS[f]}
+                </option>
+              ))}
+            </select>
+            <span className="hint">
+              «Formatiert»: Fett, Kursiv, Titel, Listen und Links in den Schritten; das System erhält den Inhalt zusätzlich als HTML. «Nur Text»
+              z.B. für SMS oder Anrufe.
+            </span>
+          </label>
+          <label className="field">
+            <span>Zeichengrenze</span>
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              step={1}
+              value={draft.maxChars}
+              onChange={(e) => setDraft({ ...draft, maxChars: e.target.value })}
+              placeholder="keine (z.B. 160 für SMS)"
+            />
+            <span className="hint">Längere Inhalte werden im Editor und beim Testen markiert.</span>
+          </label>
+        </div>
         <div className="row" style={{ justifyContent: "flex-end" }}>
           {draft.id && (
             <button type="button" className="btn" onClick={() => setDraft(EMPTY)}>
